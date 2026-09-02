@@ -67,7 +67,7 @@ The module targets Java 8 bytecode and is verified on Java 8 and Java 21:
 mvn --batch-mode --show-version --no-transfer-progress clean verify
 ```
 
-The deployable module is produced at `omod/target/sihsalusnotifications-1.0.0.omod`.
+The deployable module is produced at `omod/target/sihsalusnotifications-1.0.1.omod`.
 
 ## Runtime notes
 
