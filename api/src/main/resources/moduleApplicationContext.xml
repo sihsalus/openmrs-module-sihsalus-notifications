@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+  <bean id="sihsalusNotificationClock"
+    class="org.openmrs.module.sihsalusnotifications.api.impl.SystemNotificationClock" />
+
+  <bean id="sihsalusNotificationObjectMapper"
+    class="com.fasterxml.jackson.databind.ObjectMapper" />
+
+  <bean id="sihsalusNotificationService"
+    class="org.openmrs.module.sihsalusnotifications.api.impl.InMemoryNotificationService">
+    <property name="clock" ref="sihsalusNotificationClock" />
+    <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
+  </bean>
+
+  <bean parent="serviceContext">
+    <property name="moduleService">
+      <list merge="true">
+        <value>org.openmrs.module.sihsalusnotifications.api.NotificationService</value>
+        <ref bean="sihsalusNotificationService" />
+      </list>
+    </property>
+  </bean>
+</beans>
