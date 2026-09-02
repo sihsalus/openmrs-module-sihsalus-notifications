@@ -28,17 +28,19 @@ public class InMemoryNotificationServiceTest {
 
     private static final String USER_B = "22222222-2222-4222-8222-222222222222";
 
+    private static final String LOCATION_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    private static final String LOCATION_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
     private InMemoryNotificationService service;
+
+    private MutableClock clock;
 
     @Before
     public void setUp() {
         service = new InMemoryNotificationService();
-        service.setClock(new NotificationClock() {
-            @Override
-            public long currentTimeMillis() {
-                return 1_788_304_400_000L;
-            }
-        });
+        clock = new MutableClock(1_788_304_400_000L);
+        service.setClock(clock);
     }
 
     @Test
@@ -87,6 +89,105 @@ public class InMemoryNotificationServiceTest {
     }
 
     @Test
+    public void locationScopedEventsRequireBothPrivilegeAndMatchingSessionLocation() {
+        RecordingListener matching = new RecordingListener();
+        RecordingListener wrongLocation = new RecordingListener();
+        RecordingListener missingLocation = new RecordingListener();
+        service.subscribe(identityAt(USER_A, LOCATION_A, "View Queue"), singleton("queue"), matching);
+        service.subscribe(identityAt(USER_B, LOCATION_B, "View Queue"), singleton("queue"), wrongLocation);
+        service.subscribe(new SubscriberIdentity(USER_B, singleton("View Queue")),
+                singleton("queue"), missingLocation);
+
+        service.publish(NotificationRequest.forPrivilegeAtLocation("queue", "QUEUE_REFRESH",
+                "{\"reason\":\"assignment\"}", "View Queue", LOCATION_A));
+
+        assertEquals(1, matching.events.size());
+        assertTrue(wrongLocation.events.isEmpty());
+        assertTrue(missingLocation.events.isEmpty());
+    }
+
+    @Test
+    public void locationScopeAlsoAppliesToSuperUsers() {
+        RecordingListener listener = new RecordingListener();
+        service.subscribe(new SubscriberIdentity(USER_A, Collections.<String>emptySet(), true, LOCATION_B),
+                singleton("queue"), listener);
+
+        service.publish(NotificationRequest.forPrivilegeAtLocation("queue", "QUEUE_REFRESH",
+                "{}", "View Queue", LOCATION_A));
+
+        assertTrue(listener.events.isEmpty());
+    }
+
+    @Test
+    public void replaysAuthorizedEventsAfterAKnownCursor() {
+        NotificationEvent first = service.publish(NotificationRequest.forUser(
+                USER_A, "queue", "QUEUE_ENTRY_CREATED", "{}"));
+        NotificationEvent second = service.publish(NotificationRequest.forUser(
+                USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        service.publish(NotificationRequest.forUser(USER_B, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        RecordingListener listener = new RecordingListener();
+
+        NotificationSubscription subscription = service.subscribe(
+                identity(USER_A), singleton("queue"), listener, first.getId());
+
+        assertTrue(subscription.isReplayComplete());
+        assertEquals(Collections.singletonList(second), listener.events);
+        assertEquals(1L, service.getMetrics().getReplayDeliveryCount());
+    }
+
+    @Test
+    public void reportsAnUnavailableReplayCursorWithoutLeakingHistory() {
+        service.publish(NotificationRequest.forUser(USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        RecordingListener listener = new RecordingListener();
+
+        NotificationSubscription subscription = service.subscribe(identity(USER_A), singleton("queue"), listener,
+                "33333333-3333-4333-8333-333333333333");
+
+        assertTrue(!subscription.isReplayComplete());
+        assertTrue(listener.events.isEmpty());
+        assertEquals(1L, service.getMetrics().getReplayMissCount());
+        assertThrows(IllegalArgumentException.class, () -> service.subscribe(
+                identity(USER_A), singleton("queue"), listener, "not-a-uuid"));
+    }
+
+    @Test
+    public void requestsResynchronizationInsteadOfOverflowingTheConnectionQueue() {
+        NotificationEvent cursor = service.publish(NotificationRequest.forUser(
+                USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        for (int index = 0; index <= NotificationConstants.MAX_PENDING_EVENTS_PER_CONNECTION; index++) {
+            service.publish(NotificationRequest.forUser(
+                    USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        }
+        RecordingListener listener = new RecordingListener();
+
+        NotificationSubscription subscription = service.subscribe(
+                identity(USER_A), singleton("queue"), listener, cursor.getId());
+
+        assertTrue(!subscription.isReplayComplete());
+        assertTrue(listener.events.isEmpty());
+        assertEquals(1L, service.getMetrics().getReplayMissCount());
+    }
+
+    @Test
+    public void expiresReplayHistoryAndKeepsItBounded() {
+        NotificationEvent expired = service.publish(NotificationRequest.forUser(
+                USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        clock.advance(NotificationConstants.REPLAY_WINDOW_MILLIS + 1L);
+        service.publish(NotificationRequest.forUser(USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+
+        assertEquals(1, service.getMetrics().getRetainedEventCount());
+        NotificationSubscription subscription = service.subscribe(identity(USER_A), singleton("queue"),
+                new RecordingListener(), expired.getId());
+        assertTrue(!subscription.isReplayComplete());
+
+        for (int index = 0; index <= NotificationConstants.MAX_REPLAY_EVENTS; index++) {
+            service.publish(NotificationRequest.forUser(USER_A, "queue", "QUEUE_ENTRY_UPDATED", "{}"));
+        }
+        assertEquals(NotificationConstants.MAX_REPLAY_EVENTS,
+                service.getMetrics().getRetainedEventCount());
+    }
+
+    @Test
     public void unrestrictedBroadcastsAreRejected() {
         assertThrows(ValidationException.class, () -> service.publish(
                 NotificationRequest.forPrivilege("system", "NOTICE", "{}", null)));
@@ -104,6 +205,11 @@ public class InMemoryNotificationServiceTest {
         String oversized = "{\"value\":\"" + new String(chars) + "\"}";
         assertThrows(ValidationException.class, () -> service.publish(
                 NotificationRequest.forUser(USER_A, "system", "NOTICE", oversized)));
+        assertThrows(ValidationException.class, () -> service.publish(
+                NotificationRequest.forPrivilegeAtLocation("system", "NOTICE", "{}",
+                        "View Queue", "not-a-uuid")));
+        assertThrows(IllegalArgumentException.class, () -> NotificationRequest.forPrivilegeAtLocation(
+                "system", "NOTICE", "{}", "View Queue", " "));
     }
 
     @Test
@@ -150,10 +256,15 @@ public class InMemoryNotificationServiceTest {
         });
         service.publish(NotificationRequest.forUser(USER_A, "system", "NOTICE", "{}"));
         assertEquals(0, service.getSubscriberCount());
+        assertEquals(1L, service.getMetrics().getDeliveryFailureCount());
     }
 
     private SubscriberIdentity identity(String uuid) {
         return new SubscriberIdentity(uuid, Collections.<String>emptySet());
+    }
+
+    private SubscriberIdentity identityAt(String uuid, String locationUuid, String privilege) {
+        return new SubscriberIdentity(uuid, singleton(privilege), false, locationUuid);
     }
 
     private Set<String> singleton(String value) {
@@ -167,6 +278,24 @@ public class InMemoryNotificationServiceTest {
         @Override
         public void onNotification(NotificationEvent event) {
             events.add(event);
+        }
+    }
+
+    private static final class MutableClock implements NotificationClock {
+
+        private long currentTimeMillis;
+
+        private MutableClock(long currentTimeMillis) {
+            this.currentTimeMillis = currentTimeMillis;
+        }
+
+        @Override
+        public long currentTimeMillis() {
+            return currentTimeMillis;
+        }
+
+        private void advance(long millis) {
+            currentTimeMillis += millis;
         }
     }
 }

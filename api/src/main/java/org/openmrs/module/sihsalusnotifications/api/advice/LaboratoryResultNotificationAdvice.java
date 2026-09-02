@@ -45,12 +45,18 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
             return result;
         }
 
-        final String orderUuid = ((Order) result).getUuid();
+        Order order = (Order) result;
+        final String orderUuid = order.getUuid();
+        final String scopeLocationUuid = scopeLocationUuid(order);
+        if (scopeLocationUuid == null) {
+            log.warn("Skipping a laboratory result notification without an encounter location");
+            return result;
+        }
         Runnable publish = new Runnable() {
 
             @Override
             public void run() {
-                publishSafely(orderUuid);
+                publishSafely(orderUuid, scopeLocationUuid);
             }
         };
 
@@ -82,11 +88,19 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
                 && !((Order) result).getUuid().trim().isEmpty();
     }
 
-    private void publishSafely(String orderUuid) {
+    private String scopeLocationUuid(Order order) {
+        if (order.getEncounter() == null || order.getEncounter().getLocation() == null) {
+            return null;
+        }
+        String locationUuid = order.getEncounter().getLocation().getUuid();
+        return locationUuid == null || locationUuid.trim().isEmpty() ? null : locationUuid;
+    }
+
+    private void publishSafely(String orderUuid, String scopeLocationUuid) {
         try {
             String payload = objectMapper.writeValueAsString(Collections.singletonMap("orderUuid", orderUuid));
-            notificationService.publish(NotificationRequest.forPrivilege(
-                    TOPIC, EVENT_TYPE, payload, REQUIRED_PRIVILEGE));
+            notificationService.publish(NotificationRequest.forPrivilegeAtLocation(
+                    TOPIC, EVENT_TYPE, payload, REQUIRED_PRIVILEGE, scopeLocationUuid));
         } catch (JsonProcessingException | RuntimeException exception) {
             log.warn("Unable to publish the laboratory result-ready notification", exception);
         }

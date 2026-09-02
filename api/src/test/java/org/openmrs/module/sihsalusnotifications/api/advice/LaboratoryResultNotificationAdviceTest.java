@@ -17,6 +17,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.openmrs.Encounter;
+import org.openmrs.Location;
 import org.openmrs.Order;
 import org.openmrs.TestOrder;
 import org.openmrs.api.OrderService;
@@ -28,6 +30,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class LaboratoryResultNotificationAdviceTest {
 
     private static final String ORDER_UUID = "5eb7c2ad-86ac-4f5e-8b86-ec14a0fb40df";
+
+    private static final String LOCATION_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
     private NotificationService notificationService;
 
@@ -61,6 +65,7 @@ public class LaboratoryResultNotificationAdviceTest {
         assertEquals(LaboratoryResultNotificationAdvice.EVENT_TYPE, request.getType());
         assertEquals(LaboratoryResultNotificationAdvice.REQUIRED_PRIVILEGE, request.getRequiredPrivilege());
         assertEquals(null, request.getRecipientUserUuid());
+        assertEquals(LOCATION_UUID, request.getScopeLocationUuid());
         assertEquals("{\"orderUuid\":\"" + ORDER_UUID + "\"}", request.getPayloadJson());
     }
 
@@ -108,6 +113,17 @@ public class LaboratoryResultNotificationAdviceTest {
     }
 
     @Test
+    public void skipsCompletedOrdersWithoutAnEncounterLocationToFailClosed() throws Throwable {
+        TestOrder order = new TestOrder();
+        order.setUuid(ORDER_UUID);
+        order.setFulfillerStatus(Order.FulfillerStatus.COMPLETED);
+
+        advice.invoke(invocationFor(order, Order.FulfillerStatus.COMPLETED));
+
+        verify(notificationService, never()).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void realtimeFailureDoesNotFailClinicalUpdate() throws Throwable {
         TestOrder order = completedTestOrder();
         when(notificationService.publish(any(NotificationRequest.class))).thenThrow(new IllegalStateException("full"));
@@ -121,6 +137,11 @@ public class LaboratoryResultNotificationAdviceTest {
         TestOrder order = new TestOrder();
         order.setUuid(ORDER_UUID);
         order.setFulfillerStatus(Order.FulfillerStatus.COMPLETED);
+        Encounter encounter = new Encounter();
+        Location location = new Location();
+        location.setUuid(LOCATION_UUID);
+        encounter.setLocation(location);
+        order.setEncounter(encounter);
         return order;
     }
 

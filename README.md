@@ -4,6 +4,7 @@ This repository owns the authenticated realtime transports used by SIHSALUS:
 
 - WebSocket: `/openmrs/ws/sihsalus/notifications?connectionId=<random-uuid>&topics=system,queue`
 - Server-Sent Events: `/openmrs/ws/sihsalus/notifications/sse?topics=system,queue`
+- Administrative status: `/openmrs/ws/sihsalus/notifications/status`
 
 The deployable artifact contains both transports. The SIHSALUS distribution consumes a released
 `sihsalusnotifications-omod` version; module source is not vendored into the distribution.
@@ -21,17 +22,25 @@ The deployable artifact contains both transports. The SIHSALUS distribution cons
   in another OMOD publishes through `NotificationService`.
 - Every event is either addressed to one user UUID or protected by a named OpenMRS privilege.
   Unrestricted broadcasts are rejected.
+- Location-scoped events additionally require the subscriber's current OpenMRS session location to
+  match. Superuser status does not bypass this location boundary. Built-in clinical events fail
+  closed when their encounter has no location.
 - Payloads must be JSON objects and are limited to 64 KiB. Topic and event names use a constrained
   machine-readable alphabet, preventing SSE field injection.
 - Delivery is bounded and ephemeral. It does not replace clinical persistence, audit, queues, or
   transactional outbox processing. Slow clients are disconnected instead of creating unbounded
   memory growth. The node admits at most 500 total subscribers and 50 concurrent blocking SSE
-  responses.
+  responses. A five-minute replay buffer is capped at 1,000 events and 4 MiB of payloads.
 - The OpenMRS 2.8 web descriptor does not enable Servlet async mode. SSE therefore uses bounded
   25-second streaming responses and standard browser reconnection. WebSocket is the preferred
   long-lived transport.
-- WebSockets reconnect after at most five minutes so OpenMRS session and privilege changes are
-  revalidated. SSE revalidates them on every bounded reconnect.
+- WebSockets reconnect after at most five minutes so OpenMRS session, location, and privilege
+  changes are revalidated. SSE revalidates them on every bounded reconnect and honors the standard
+  `Last-Event-ID` header. If a cursor is expired or unavailable after restart, SSE emits
+  `SIHSALUS_RESYNC_REQUIRED` so clients can refetch authoritative data without displaying a
+  duplicate clinical notice, and clears the stale cursor before the next reconnect. A replay larger
+  than a connection's bounded queue also requests a resynchronization instead of silently dropping
+  events.
 
 ## Publishing from another OMOD
 
@@ -58,7 +67,7 @@ required privileges are authorization metadata and are never serialized to clien
 
 ## Laboratory result-ready event
 
-Version 1.1.0 also publishes a built-in event after an OpenMRS `TestOrder` is successfully moved to
+Version 1.2.0 publishes a built-in event after an OpenMRS `TestOrder` is successfully moved to
 the `COMPLETED` fulfiller status:
 
 - topic: `laboratory`
@@ -66,7 +75,7 @@ the `COMPLETED` fulfiller status:
 - required privilege: `app:home.laboratorio`
 - payload: `{ "orderUuid": "..." }`
 
-The event is emitted only after transaction commit. It contains no patient demographics, result
+The event is emitted only after transaction commit and is restricted to the encounter location. It contains no patient demographics, result
 values, diagnoses, or free text. Delivery failures are logged and never roll back the clinical
 order update. The event is a refresh signal only; clients must retrieve the authoritative result
 through the normal authenticated OpenMRS APIs.
@@ -76,7 +85,7 @@ reconnect after close code `1001` (`reauthenticate`) or `1013` (temporary capaci
 
 ## Order-created events
 
-Version 1.1.0 emits department-scoped events after a genuinely new order commits:
+Version 1.2.0 emits department- and encounter-location-scoped events after a genuinely new order commits:
 
 | OpenMRS order | Topic | Type | Required privilege |
 | --- | --- | --- | --- |
@@ -87,6 +96,21 @@ Each payload contains only `{ "orderUuid": "..." }`. Patient identity, medicatio
 dosage, instructions, diagnosis, and free text are deliberately excluded. Revisions, renewals,
 discontinuations, and repeated saves do not emit creation events. As with result-ready events,
 delivery happens after commit and is only a signal for authorized clients to refetch their queue.
+An order without an encounter location produces no realtime event; normal worklist polling remains
+the fallback.
+
+## Recovery and monitoring
+
+SSE clients automatically replay authorized events after a recognized `Last-Event-ID`. Replay
+reapplies user, privilege, topic, and session-location checks; it never bypasses current access.
+The bounded history is memory-only and is cleared when the module or OpenMRS restarts. It is not a
+durable notification inbox.
+
+`GET /openmrs/ws/sihsalus/notifications/status` returns aggregate counters for subscribers,
+retained events, publications, live deliveries, replay deliveries, delivery failures, and replay
+misses. The endpoint requires an authenticated, non-retired user with
+`View Administration Functions`, uses `Cache-Control: no-store`, and never returns event payloads,
+topics, user identifiers, or location identifiers.
 
 ## Build
 
@@ -96,7 +120,7 @@ The module targets Java 8 bytecode and is verified on Java 8 and Java 21:
 mvn --batch-mode --show-version --no-transfer-progress clean verify
 ```
 
-The deployable module is produced at `omod/target/sihsalusnotifications-1.1.0.omod`.
+The deployable module is produced at `omod/target/sihsalusnotifications-1.2.0.omod`.
 
 ## Runtime notes
 

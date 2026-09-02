@@ -55,12 +55,18 @@ public final class OrderCreationNotificationAdvice implements MethodInterceptor 
             return result;
         }
 
-        final String orderUuid = ((Order) result).getUuid();
+        Order order = (Order) result;
+        final String orderUuid = order.getUuid();
+        final String scopeLocationUuid = scopeLocationUuid(order);
+        if (scopeLocationUuid == null) {
+            log.warn("Skipping an order-created notification without an encounter location");
+            return result;
+        }
         Runnable publish = new Runnable() {
 
             @Override
             public void run() {
-                publishSafely(target, orderUuid);
+                publishSafely(target, orderUuid, scopeLocationUuid);
             }
         };
 
@@ -112,11 +118,20 @@ public final class OrderCreationNotificationAdvice implements MethodInterceptor 
         return null;
     }
 
-    private void publishSafely(NotificationTarget target, String orderUuid) {
+    private String scopeLocationUuid(Order order) {
+        if (order.getEncounter() == null || order.getEncounter().getLocation() == null) {
+            return null;
+        }
+        String locationUuid = order.getEncounter().getLocation().getUuid();
+        return locationUuid == null || locationUuid.trim().isEmpty() ? null : locationUuid;
+    }
+
+    private void publishSafely(NotificationTarget target, String orderUuid, String scopeLocationUuid) {
         try {
             String payload = objectMapper.writeValueAsString(Collections.singletonMap("orderUuid", orderUuid));
-            notificationService.publish(NotificationRequest.forPrivilege(
-                    target.topic, target.eventType, payload, target.requiredPrivilege));
+            notificationService.publish(NotificationRequest.forPrivilegeAtLocation(
+                    target.topic, target.eventType, payload, target.requiredPrivilege,
+                    scopeLocationUuid));
         } catch (JsonProcessingException | RuntimeException exception) {
             log.warn("Unable to publish the order-created notification", exception);
         }

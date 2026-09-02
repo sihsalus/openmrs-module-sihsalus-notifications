@@ -39,4 +39,14 @@
     <url-pattern>/ws/sihsalus/notifications/sse</url-pattern>
     <url-pattern>/ws/sihsalus/notifications/sse/</url-pattern>
   </filter-mapping>
+
+  <filter>
+    <filter-name>SIHSALUS notifications status</filter-name>
+    <filter-class>org.openmrs.module.sihsalusnotifications.web.NotificationStatusFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>SIHSALUS notifications status</filter-name>
+    <url-pattern>/ws/sihsalus/notifications/status</url-pattern>
+    <url-pattern>/ws/sihsalus/notifications/status/</url-pattern>
+  </filter-mapping>
 </module>

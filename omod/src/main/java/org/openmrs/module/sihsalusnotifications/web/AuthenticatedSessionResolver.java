@@ -5,6 +5,7 @@ import java.util.Set;
 
 import javax.servlet.http.HttpSession;
 
+import org.openmrs.Location;
 import org.openmrs.Privilege;
 import org.openmrs.User;
 import org.openmrs.api.context.UserContext;
@@ -32,7 +33,10 @@ final class AuthenticatedSessionResolver {
                     privilegeNames.add(privilege.getPrivilege());
                 }
             }
-            return new SubscriberIdentity(user.getUuid(), privilegeNames, user.isSuperUser());
+            Location location = ((UserContext) value).getLocation();
+            String locationUuid = location == null ? null : location.getUuid();
+            return new SubscriberIdentity(user.getUuid(), privilegeNames, user.isSuperUser(),
+                    locationUuid);
         } catch (RuntimeException exception) {
             return null;
         }

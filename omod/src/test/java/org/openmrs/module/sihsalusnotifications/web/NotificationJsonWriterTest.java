@@ -19,6 +19,7 @@ public class NotificationJsonWriterTest {
                 "{\"queueUuid\":\"abc\",\"count\":2}",
                 "22222222-2222-4222-8222-222222222222",
                 "View Queue",
+                "33333333-3333-4333-8333-333333333333",
                 1_788_304_400_000L);
 
         JsonNode result = new ObjectMapper().readTree(new NotificationJsonWriter().write(event));
@@ -30,5 +31,6 @@ public class NotificationJsonWriterTest {
         assertEquals("2026-09-01T23:13:20Z", result.get("timestamp").asText());
         assertFalse(result.has("recipientUserUuid"));
         assertFalse(result.has("requiredPrivilege"));
+        assertFalse(result.has("scopeLocationUuid"));
     }
 }

@@ -26,7 +26,7 @@ import org.w3c.dom.NodeList;
 public class TransportModuleConfigurationTest {
 
     @Test
-    public void omodRegistersWebSocketBootstrapAndBothSsePathForms() throws Exception {
+    public void omodRegistersWebSocketBootstrapSseAndAdministrativeStatusPaths() throws Exception {
         try (InputStream config = getClass().getResourceAsStream("/config.xml")) {
             assertTrue("Packaged config.xml must be available", config != null);
             Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(config);
@@ -37,6 +37,8 @@ public class TransportModuleConfigurationTest {
                     document.getElementsByTagName("servlet-class").item(0).getTextContent().trim());
             assertEquals(SseNotificationFilter.class.getName(),
                     document.getElementsByTagName("filter-class").item(0).getTextContent().trim());
+            assertEquals(NotificationStatusFilter.class.getName(),
+                    document.getElementsByTagName("filter-class").item(1).getTextContent().trim());
 
             NodeList patterns = document.getElementsByTagName("url-pattern");
             List<String> values = new ArrayList<String>();
@@ -45,6 +47,8 @@ public class TransportModuleConfigurationTest {
             }
             assertTrue(values.contains("/ws/sihsalus/notifications/sse"));
             assertTrue(values.contains("/ws/sihsalus/notifications/sse/"));
+            assertTrue(values.contains("/ws/sihsalus/notifications/status"));
+            assertTrue(values.contains("/ws/sihsalus/notifications/status/"));
         }
     }
 

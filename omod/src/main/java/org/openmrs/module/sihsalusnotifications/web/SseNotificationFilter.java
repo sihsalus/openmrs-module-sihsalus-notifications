@@ -3,6 +3,7 @@ package org.openmrs.module.sihsalusnotifications.web;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,6 +26,8 @@ import org.openmrs.module.sihsalusnotifications.api.NotificationSubscription;
 import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
 
 public class SseNotificationFilter implements Filter {
+
+    static final String RESYNC_EVENT_TYPE = "SIHSALUS_RESYNC_REQUIRED";
 
     private static final AtomicInteger activeConnections = new AtomicInteger();
 
@@ -68,6 +71,15 @@ public class SseNotificationFilter implements Filter {
             return;
         }
 
+        final String lastEventId;
+        try {
+            lastEventId = lastEventId(httpRequest);
+        } catch (IllegalArgumentException exception) {
+            noStore(httpResponse);
+            httpResponse.sendError(HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
+            return;
+        }
+
         NotificationService service = Context.getService(NotificationService.class);
         final ArrayBlockingQueue<NotificationEvent> pending =
                 new ArrayBlockingQueue<NotificationEvent>(
@@ -92,8 +104,9 @@ public class SseNotificationFilter implements Filter {
 
         NotificationSubscription subscription = null;
         try {
-            subscription = service.subscribe(identity, topics, listener);
-            stream(httpResponse, pending, settings.getSseConnectionSeconds());
+            subscription = service.subscribe(identity, topics, listener, lastEventId);
+            stream(httpResponse, pending, settings.getSseConnectionSeconds(),
+                    subscription.isReplayComplete());
         } catch (IllegalStateException exception) {
             if (!httpResponse.isCommitted()) {
                 noStore(httpResponse);
@@ -109,7 +122,7 @@ public class SseNotificationFilter implements Filter {
     }
 
     private void stream(HttpServletResponse response, ArrayBlockingQueue<NotificationEvent> pending,
-            int connectionSeconds) throws IOException {
+            int connectionSeconds, boolean replayComplete) throws IOException {
         response.setStatus(HttpServletResponse.SC_OK);
         response.setCharacterEncoding("UTF-8");
         response.setContentType("text/event-stream");
@@ -117,8 +130,7 @@ public class SseNotificationFilter implements Filter {
         response.setHeader("X-Accel-Buffering", "no");
 
         PrintWriter writer = response.getWriter();
-        writer.write("retry: 3000\n");
-        writer.write(": connected\n\n");
+        writePreamble(writer, replayComplete);
         writer.flush();
 
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(connectionSeconds);
@@ -150,6 +162,37 @@ public class SseNotificationFilter implements Filter {
             if (writer.checkError()) {
                 break;
             }
+        }
+    }
+
+    void writePreamble(PrintWriter writer, boolean replayComplete) {
+        writer.write("retry: 3000\n");
+        writer.write(": connected\n\n");
+        if (!replayComplete) {
+            writer.write("id:\n");
+            writer.write("event: ");
+            writer.write(RESYNC_EVENT_TYPE);
+            writer.write("\n");
+            writer.write("data: {\"reason\":\"cursor-unavailable\"}\n\n");
+        }
+    }
+
+    String lastEventId(HttpServletRequest request) {
+        String value = request.getHeader("Last-Event-ID");
+        if (value == null || value.trim().isEmpty()) {
+            value = request.getParameter("after");
+        }
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = value.trim();
+        try {
+            if (!UUID.fromString(normalized).toString().equalsIgnoreCase(normalized)) {
+                throw new IllegalArgumentException();
+            }
+            return normalized;
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Last notification event ID must be a UUID");
         }
     }
 

@@ -12,11 +12,18 @@ public final class SubscriberIdentity {
 
     private final boolean superUser;
 
+    private final String locationUuid;
+
     public SubscriberIdentity(String userUuid, Set<String> privileges) {
-        this(userUuid, privileges, false);
+        this(userUuid, privileges, false, null);
     }
 
     public SubscriberIdentity(String userUuid, Set<String> privileges, boolean superUser) {
+        this(userUuid, privileges, superUser, null);
+    }
+
+    public SubscriberIdentity(String userUuid, Set<String> privileges, boolean superUser,
+            String locationUuid) {
         if (userUuid == null || userUuid.trim().isEmpty()) {
             throw new IllegalArgumentException("Subscriber user UUID is required");
         }
@@ -25,6 +32,8 @@ public final class SubscriberIdentity {
                 ? Collections.<String>emptySet()
                 : Collections.unmodifiableSet(new HashSet<String>(privileges));
         this.superUser = superUser;
+        this.locationUuid = locationUuid == null || locationUuid.trim().isEmpty()
+                ? null : locationUuid;
     }
 
     public String getUserUuid() {
@@ -41,5 +50,9 @@ public final class SubscriberIdentity {
 
     public boolean isSuperUser() {
         return superUser;
+    }
+
+    public String getLocationUuid() {
+        return locationUuid;
     }
 }

@@ -18,6 +18,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.openmrs.DrugOrder;
+import org.openmrs.Encounter;
+import org.openmrs.Location;
 import org.openmrs.Order;
 import org.openmrs.TestOrder;
 import org.openmrs.api.OrderContext;
@@ -30,6 +32,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class OrderCreationNotificationAdviceTest {
 
     private static final String ORDER_UUID = "deac8f42-3b93-44ab-99dd-f6d37efb3259";
+
+    private static final String LOCATION_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
     private NotificationService notificationService;
 
@@ -118,6 +122,17 @@ public class OrderCreationNotificationAdviceTest {
     }
 
     @Test
+    public void skipsOrdersWithoutAnEncounterLocationToFailClosed() throws Throwable {
+        DrugOrder order = new DrugOrder();
+        order.setUuid(ORDER_UUID);
+        order.setAction(Order.Action.NEW);
+
+        advice.invoke(invocationFor(order, "saveOrder"));
+
+        verify(notificationService, never()).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void realtimeFailureDoesNotFailClinicalCreate() throws Throwable {
         DrugOrder order = newOrder(new DrugOrder());
         when(notificationService.publish(any(NotificationRequest.class))).thenThrow(new IllegalStateException("full"));
@@ -135,12 +150,18 @@ public class OrderCreationNotificationAdviceTest {
         assertEquals(eventType, request.getType());
         assertEquals(privilege, request.getRequiredPrivilege());
         assertEquals(null, request.getRecipientUserUuid());
+        assertEquals(LOCATION_UUID, request.getScopeLocationUuid());
         assertEquals("{\"orderUuid\":\"" + ORDER_UUID + "\"}", request.getPayloadJson());
     }
 
     private <T extends Order> T newOrder(T order) {
         order.setUuid(ORDER_UUID);
         order.setAction(Order.Action.NEW);
+        Encounter encounter = new Encounter();
+        Location location = new Location();
+        location.setUuid(LOCATION_UUID);
+        encounter.setLocation(location);
+        order.setEncounter(encounter);
         return order;
     }
 

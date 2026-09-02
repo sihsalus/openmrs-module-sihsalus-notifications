@@ -23,6 +23,7 @@ import javax.websocket.Session;
 import org.junit.After;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.openmrs.Location;
 import org.openmrs.User;
 import org.openmrs.api.context.UserContext;
 import org.openmrs.module.sihsalusnotifications.api.NotificationListener;
@@ -76,6 +77,7 @@ public class NotificationWebSocketEndpointTest {
         ArgumentCaptor<java.util.Set<String>> topics = ArgumentCaptor.forClass(java.util.Set.class);
         verify(service).subscribe(identity.capture(), topics.capture(), any(NotificationListener.class));
         assertEquals("11111111-1111-4111-8111-111111111111", identity.getValue().getUserUuid());
+        assertEquals("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", identity.getValue().getLocationUuid());
         assertTrue(topics.getValue().contains("queue"));
         assertTrue(topics.getValue().contains("laboratory"));
         verify(session).setMaxIdleTimeout(60_000L);
@@ -88,12 +90,15 @@ public class NotificationWebSocketEndpointTest {
         HttpSession httpSession = mock(HttpSession.class);
         UserContext userContext = mock(UserContext.class);
         User user = mock(User.class);
+        Location location = mock(Location.class);
         when(httpSession.getAttribute(AuthenticatedSessionResolver.OPENMRS_USER_CONTEXT_ATTRIBUTE))
                 .thenReturn(userContext);
         when(userContext.getAuthenticatedUser()).thenReturn(user);
         when(user.getUuid()).thenReturn("11111111-1111-4111-8111-111111111111");
         when(user.getRetired()).thenReturn(false);
         when(user.getPrivileges()).thenReturn(Collections.emptyList());
+        when(userContext.getLocation()).thenReturn(location);
+        when(location.getUuid()).thenReturn("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
         return httpSession;
     }
 }
