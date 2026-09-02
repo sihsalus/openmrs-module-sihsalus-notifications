@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.Test;
+import org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice;
 import org.openmrs.module.sihsalusnotifications.api.impl.InMemoryNotificationService;
 import org.springframework.beans.factory.support.ManagedList;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -30,6 +31,8 @@ public class NotificationServiceSpringContextTest {
             Map<String, NotificationService> services = context.getBeansOfType(NotificationService.class);
             assertEquals(1, services.size());
             assertTrue(services.get("sihsalusNotificationService") instanceof InMemoryNotificationService);
+            assertTrue(context.getBean("sihsalusLaboratoryResultNotificationAdvice")
+                    instanceof LaboratoryResultNotificationAdvice);
         } finally {
             context.close();
         }

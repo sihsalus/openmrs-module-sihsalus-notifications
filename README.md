@@ -56,6 +56,21 @@ notifications.publish(NotificationRequest.forPrivilege(
 The wire event contains `id`, `topic`, `type`, `timestamp`, and `payload`. Recipient UUIDs and
 required privileges are authorization metadata and are never serialized to clients.
 
+## Laboratory result-ready event
+
+Version 1.1.0 also publishes a built-in event after an OpenMRS `TestOrder` is successfully moved to
+the `COMPLETED` fulfiller status:
+
+- topic: `laboratory`
+- type: `LAB_RESULT_READY`
+- required privilege: `app:home.laboratorio`
+- payload: `{ "orderUuid": "..." }`
+
+The event is emitted only after transaction commit. It contains no patient demographics, result
+values, diagnoses, or free text. Delivery failures are logged and never roll back the clinical
+order update. The event is a refresh signal only; clients must retrieve the authoritative result
+through the normal authenticated OpenMRS APIs.
+
 Browser WebSocket clients should generate the handshake identifier with `crypto.randomUUID()` and
 reconnect after close code `1001` (`reauthenticate`) or `1013` (temporary capacity/backpressure).
 
@@ -67,7 +82,7 @@ The module targets Java 8 bytecode and is verified on Java 8 and Java 21:
 mvn --batch-mode --show-version --no-transfer-progress clean verify
 ```
 
-The deployable module is produced at `omod/target/sihsalusnotifications-1.0.1.omod`.
+The deployable module is produced at `omod/target/sihsalusnotifications-1.1.0.omod`.
 
 ## Runtime notes
 

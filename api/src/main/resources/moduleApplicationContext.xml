@@ -16,6 +16,12 @@
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
   </bean>
 
+  <bean id="sihsalusLaboratoryResultNotificationAdvice"
+    class="org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice">
+    <property name="notificationService" ref="sihsalusNotificationService" />
+    <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
+  </bean>
+
   <bean parent="serviceContext">
     <property name="moduleService">
       <list merge="true">
