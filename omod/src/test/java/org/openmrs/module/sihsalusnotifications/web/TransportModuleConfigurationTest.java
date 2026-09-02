@@ -18,6 +18,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.junit.Test;
+import org.openmrs.module.ModuleActivator;
+import org.openmrs.module.sihsalusnotifications.SihsalusNotificationsActivator;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
@@ -28,6 +30,9 @@ public class TransportModuleConfigurationTest {
         try (InputStream config = getClass().getResourceAsStream("/config.xml")) {
             assertTrue("Packaged config.xml must be available", config != null);
             Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(config);
+            String activatorClassName = document.getElementsByTagName("activator").item(0).getTextContent().trim();
+            assertEquals(SihsalusNotificationsActivator.class.getName(), activatorClassName);
+            assertTrue(ModuleActivator.class.isAssignableFrom(Class.forName(activatorClassName)));
             assertEquals(WebSocketBootstrapServlet.class.getName(),
                     document.getElementsByTagName("servlet-class").item(0).getTextContent().trim());
             assertEquals(SseNotificationFilter.class.getName(),
