@@ -74,6 +74,20 @@ through the normal authenticated OpenMRS APIs.
 Browser WebSocket clients should generate the handshake identifier with `crypto.randomUUID()` and
 reconnect after close code `1001` (`reauthenticate`) or `1013` (temporary capacity/backpressure).
 
+## Order-created events
+
+Version 1.1.0 emits department-scoped events after a genuinely new order commits:
+
+| OpenMRS order | Topic | Type | Required privilege |
+| --- | --- | --- | --- |
+| `DrugOrder` | `pharmacy` | `MEDICATION_ORDER_CREATED` | `app:home.farmacia` |
+| `TestOrder` | `laboratory` | `LAB_ORDER_CREATED` | `app:home.laboratorio` |
+
+Each payload contains only `{ "orderUuid": "..." }`. Patient identity, medication or test names,
+dosage, instructions, diagnosis, and free text are deliberately excluded. Revisions, renewals,
+discontinuations, and repeated saves do not emit creation events. As with result-ready events,
+delivery happens after commit and is only a signal for authorized clients to refetch their queue.
+
 ## Build
 
 The module targets Java 8 bytecode and is verified on Java 8 and Java 21:
