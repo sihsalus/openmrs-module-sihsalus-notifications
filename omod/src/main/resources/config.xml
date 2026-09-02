@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module configVersion="1.2">
+  <id>${project.parent.artifactId}</id>
+  <name>${project.parent.name}</name>
+  <version>${project.parent.version}</version>
+  <package>org.openmrs.module.sihsalusnotifications</package>
+  <author>SIHSALUS</author>
+  <description>${project.parent.description}</description>
+  <require_version>2.8.0</require_version>
+
+  <globalProperty>
+    <property>sihsalusnotifications.allowedOrigins</property>
+    <defaultValue></defaultValue>
+    <description>Comma-separated additional WebSocket origins. Empty keeps strict same-origin validation.</description>
+  </globalProperty>
+  <globalProperty>
+    <property>sihsalusnotifications.sseConnectionSeconds</property>
+    <defaultValue>25</defaultValue>
+    <description>Duration of each bounded SSE response before the browser reconnects; allowed range 5-120 seconds.</description>
+  </globalProperty>
+  <globalProperty>
+    <property>sihsalusnotifications.websocketConnectionSeconds</property>
+    <defaultValue>300</defaultValue>
+    <description>Maximum WebSocket lifetime before session and privilege revalidation; allowed range 30-1800 seconds.</description>
+  </globalProperty>
+
+  <servlet>
+    <servlet-name>sihsalusnotifications-websocket-bootstrap</servlet-name>
+    <servlet-class>org.openmrs.module.sihsalusnotifications.web.WebSocketBootstrapServlet</servlet-class>
+  </servlet>
+
+  <filter>
+    <filter-name>SIHSALUS notifications SSE</filter-name>
+    <filter-class>org.openmrs.module.sihsalusnotifications.web.SseNotificationFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>SIHSALUS notifications SSE</filter-name>
+    <url-pattern>/ws/sihsalus/notifications/sse</url-pattern>
+    <url-pattern>/ws/sihsalus/notifications/sse/</url-pattern>
+  </filter-mapping>
+</module>
