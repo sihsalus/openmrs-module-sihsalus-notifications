@@ -22,9 +22,10 @@ The deployable artifact contains both transports. The SIHSALUS distribution cons
   in another OMOD publishes through `NotificationService`.
 - Every event is either addressed to one user UUID or protected by a named OpenMRS privilege.
   Unrestricted broadcasts are rejected.
-- Location-scoped events additionally require the subscriber's current OpenMRS session location to
-  match. Superuser status does not bypass this location boundary. Built-in clinical events fail
-  closed when their encounter has no location.
+- Location-scoped events additionally require the event and the subscriber's current OpenMRS
+  session location to resolve to the same nearest ancestor tagged `Facility Location`. Superuser
+  status does not bypass this facility boundary. Built-in clinical events fail closed when either
+  side has no tagged facility in its location hierarchy.
 - Payloads must be JSON objects and are limited to 64 KiB. Topic and event names use a constrained
   machine-readable alphabet, preventing SSE field injection.
 - Delivery is bounded and ephemeral. It does not replace clinical persistence, audit, queues, or
@@ -75,17 +76,18 @@ the `COMPLETED` fulfiller status:
 - required privilege: `app:home.laboratorio`
 - payload: `{ "orderUuid": "..." }`
 
-The event is emitted only after transaction commit and is restricted to the encounter location. It contains no patient demographics, result
-values, diagnoses, or free text. Delivery failures are logged and never roll back the clinical
-order update. The event is a refresh signal only; clients must retrieve the authoritative result
-through the normal authenticated OpenMRS APIs.
+The event is emitted only after transaction commit and is restricted to the encounter location's
+nearest ancestor tagged `Facility Location`. It contains no patient demographics, result values,
+diagnoses, or free text. Delivery failures are logged and never roll back the clinical order
+update. The event is a refresh signal only; clients must retrieve the authoritative result through
+the normal authenticated OpenMRS APIs.
 
 Browser WebSocket clients should generate the handshake identifier with `crypto.randomUUID()` and
 reconnect after close code `1001` (`reauthenticate`) or `1013` (temporary capacity/backpressure).
 
 ## Order-created events
 
-Version 1.2.0 emits department- and encounter-location-scoped events after a genuinely new order commits:
+Version 1.2.0 emits department- and facility-scoped events after a genuinely new order commits:
 
 | OpenMRS order | Topic | Type | Required privilege |
 | --- | --- | --- | --- |
@@ -96,8 +98,8 @@ Each payload contains only `{ "orderUuid": "..." }`. Patient identity, medicatio
 dosage, instructions, diagnosis, and free text are deliberately excluded. Revisions, renewals,
 discontinuations, and repeated saves do not emit creation events. As with result-ready events,
 delivery happens after commit and is only a signal for authorized clients to refetch their queue.
-An order without an encounter location produces no realtime event; normal worklist polling remains
-the fallback.
+An order whose encounter location has no ancestor tagged `Facility Location` produces no realtime
+event; normal worklist polling remains the fallback.
 
 ## Recovery and monitoring
 

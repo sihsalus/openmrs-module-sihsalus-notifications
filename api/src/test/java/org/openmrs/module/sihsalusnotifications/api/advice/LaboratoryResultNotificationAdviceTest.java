@@ -19,8 +19,10 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.openmrs.Encounter;
 import org.openmrs.Location;
+import org.openmrs.LocationTag;
 import org.openmrs.Order;
 import org.openmrs.TestOrder;
+import org.openmrs.module.sihsalusnotifications.api.FacilityLocationScope;
 import org.openmrs.api.OrderService;
 import org.openmrs.module.sihsalusnotifications.api.NotificationRequest;
 import org.openmrs.module.sihsalusnotifications.api.NotificationService;
@@ -124,6 +126,16 @@ public class LaboratoryResultNotificationAdviceTest {
     }
 
     @Test
+    public void skipsCompletedOrdersOutsideAConfiguredFacilityToFailClosed() throws Throwable {
+        TestOrder order = completedTestOrder();
+        order.getEncounter().getLocation().setParentLocation(null);
+
+        advice.invoke(invocationFor(order, Order.FulfillerStatus.COMPLETED));
+
+        verify(notificationService, never()).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void realtimeFailureDoesNotFailClinicalUpdate() throws Throwable {
         TestOrder order = completedTestOrder();
         when(notificationService.publish(any(NotificationRequest.class))).thenThrow(new IllegalStateException("full"));
@@ -138,9 +150,13 @@ public class LaboratoryResultNotificationAdviceTest {
         order.setUuid(ORDER_UUID);
         order.setFulfillerStatus(Order.FulfillerStatus.COMPLETED);
         Encounter encounter = new Encounter();
-        Location location = new Location();
-        location.setUuid(LOCATION_UUID);
-        encounter.setLocation(location);
+        Location facility = new Location();
+        facility.setUuid(LOCATION_UUID);
+        facility.addTag(new LocationTag(FacilityLocationScope.FACILITY_LOCATION_TAG, "Synthetic facility tag"));
+        Location serviceLocation = new Location();
+        serviceLocation.setUuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+        serviceLocation.setParentLocation(facility);
+        encounter.setLocation(serviceLocation);
         order.setEncounter(encounter);
         return order;
     }

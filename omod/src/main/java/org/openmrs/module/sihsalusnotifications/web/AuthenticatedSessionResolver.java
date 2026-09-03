@@ -9,6 +9,7 @@ import org.openmrs.Location;
 import org.openmrs.Privilege;
 import org.openmrs.User;
 import org.openmrs.api.context.UserContext;
+import org.openmrs.module.sihsalusnotifications.api.FacilityLocationScope;
 import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
 
 final class AuthenticatedSessionResolver {
@@ -34,7 +35,7 @@ final class AuthenticatedSessionResolver {
                 }
             }
             Location location = ((UserContext) value).getLocation();
-            String locationUuid = location == null ? null : location.getUuid();
+            String locationUuid = FacilityLocationScope.facilityUuid(location);
             return new SubscriberIdentity(user.getUuid(), privilegeNames, user.isSuperUser(),
                     locationUuid);
         } catch (RuntimeException exception) {

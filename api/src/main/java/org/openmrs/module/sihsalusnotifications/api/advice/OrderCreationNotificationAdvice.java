@@ -9,6 +9,7 @@ import org.aopalliance.intercept.MethodInvocation;
 import org.openmrs.DrugOrder;
 import org.openmrs.Order;
 import org.openmrs.TestOrder;
+import org.openmrs.module.sihsalusnotifications.api.FacilityLocationScope;
 import org.openmrs.module.sihsalusnotifications.api.NotificationRequest;
 import org.openmrs.module.sihsalusnotifications.api.NotificationService;
 import org.slf4j.Logger;
@@ -59,7 +60,7 @@ public final class OrderCreationNotificationAdvice implements MethodInterceptor 
         final String orderUuid = order.getUuid();
         final String scopeLocationUuid = scopeLocationUuid(order);
         if (scopeLocationUuid == null) {
-            log.warn("Skipping an order-created notification without an encounter location");
+            log.warn("Skipping an order-created notification without a tagged facility scope");
             return result;
         }
         Runnable publish = new Runnable() {
@@ -122,8 +123,7 @@ public final class OrderCreationNotificationAdvice implements MethodInterceptor 
         if (order.getEncounter() == null || order.getEncounter().getLocation() == null) {
             return null;
         }
-        String locationUuid = order.getEncounter().getLocation().getUuid();
-        return locationUuid == null || locationUuid.trim().isEmpty() ? null : locationUuid;
+        return FacilityLocationScope.facilityUuid(order.getEncounter().getLocation());
     }
 
     private void publishSafely(NotificationTarget target, String orderUuid, String scopeLocationUuid) {

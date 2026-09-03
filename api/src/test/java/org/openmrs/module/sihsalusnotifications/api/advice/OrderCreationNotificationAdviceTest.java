@@ -20,8 +20,10 @@ import org.mockito.ArgumentCaptor;
 import org.openmrs.DrugOrder;
 import org.openmrs.Encounter;
 import org.openmrs.Location;
+import org.openmrs.LocationTag;
 import org.openmrs.Order;
 import org.openmrs.TestOrder;
+import org.openmrs.module.sihsalusnotifications.api.FacilityLocationScope;
 import org.openmrs.api.OrderContext;
 import org.openmrs.api.OrderService;
 import org.openmrs.module.sihsalusnotifications.api.NotificationRequest;
@@ -133,6 +135,16 @@ public class OrderCreationNotificationAdviceTest {
     }
 
     @Test
+    public void skipsOrdersOutsideAConfiguredFacilityToFailClosed() throws Throwable {
+        DrugOrder order = newOrder(new DrugOrder());
+        order.getEncounter().getLocation().setParentLocation(null);
+
+        advice.invoke(invocationFor(order, "saveOrder"));
+
+        verify(notificationService, never()).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void realtimeFailureDoesNotFailClinicalCreate() throws Throwable {
         DrugOrder order = newOrder(new DrugOrder());
         when(notificationService.publish(any(NotificationRequest.class))).thenThrow(new IllegalStateException("full"));
@@ -158,9 +170,13 @@ public class OrderCreationNotificationAdviceTest {
         order.setUuid(ORDER_UUID);
         order.setAction(Order.Action.NEW);
         Encounter encounter = new Encounter();
-        Location location = new Location();
-        location.setUuid(LOCATION_UUID);
-        encounter.setLocation(location);
+        Location facility = new Location();
+        facility.setUuid(LOCATION_UUID);
+        facility.addTag(new LocationTag(FacilityLocationScope.FACILITY_LOCATION_TAG, "Synthetic facility tag"));
+        Location serviceLocation = new Location();
+        serviceLocation.setUuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+        serviceLocation.setParentLocation(facility);
+        encounter.setLocation(serviceLocation);
         order.setEncounter(encounter);
         return order;
     }
