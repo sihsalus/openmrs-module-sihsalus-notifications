@@ -3,6 +3,8 @@ package org.openmrs.module.sihsalusnotifications.web;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.servlet.http.HttpSession;
@@ -27,7 +29,12 @@ final class OpenmrsHandshakeConfigurator extends ServerEndpointConfig.Configurat
     @Override
     public void modifyHandshake(ServerEndpointConfig config, HandshakeRequest request,
             HandshakeResponse response) {
-        String connectionId = queryParameter(request.getRequestURI(), "connectionId");
+        String connectionId = firstParameter(request.getParameterMap(), "connectionId");
+        if (connectionId == null) {
+            // Some JSR 356 implementations expose query parameters only through
+            // the request URI, so retain the portable fallback.
+            connectionId = queryParameter(request.getRequestURI(), "connectionId");
+        }
         if (!isUuid(connectionId)) {
             return;
         }
@@ -36,6 +43,11 @@ final class OpenmrsHandshakeConfigurator extends ServerEndpointConfig.Configurat
         boolean originAllowed = originPolicy.isAllowed(request.getRequestURI(), request.getHeaders());
         WebSocketConnectionContexts.register(connectionId,
                 new WebSocketConnectionContext(httpSession, originAllowed, System.currentTimeMillis()));
+    }
+
+    private String firstParameter(Map<String, List<String>> parameters, String name) {
+        List<String> values = parameters == null ? null : parameters.get(name);
+        return values == null || values.isEmpty() ? null : values.get(0);
     }
 
     private String queryParameter(URI uri, String name) {
