@@ -1,5 +1,6 @@
 package org.openmrs.module.sihsalusnotifications.web;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -21,6 +22,7 @@ import javax.websocket.server.ServerEndpointConfig;
 
 import org.junit.After;
 import org.junit.Test;
+import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
 
 public class OpenmrsHandshakeConfiguratorTest {
 
@@ -30,9 +32,13 @@ public class OpenmrsHandshakeConfiguratorTest {
     }
 
     @Test
-    public void registersTheStandardParameterMapWhenTheContainerUriOmitsTheQuery() throws Exception {
-        String connectionId = UUID.randomUUID().toString();
+    public void bindsAnIssuedTicketFromTheStandardParameterMapWhenTheContainerUriOmitsTheQuery()
+            throws Exception {
+        SubscriberIdentity identity = identity();
+        String connectionId = WebSocketConnectionContexts.issue(identity, "session-a");
+        assertNotNull(connectionId);
         HttpSession httpSession = mock(HttpSession.class);
+        when(httpSession.getId()).thenReturn("session-a");
         HandshakeRequest request = mock(HandshakeRequest.class);
         when(request.getRequestURI()).thenReturn(
                 new URI("ws://backend:8080/openmrs/ws/sihsalus/notifications"));
@@ -49,8 +55,51 @@ public class OpenmrsHandshakeConfiguratorTest {
 
         WebSocketConnectionContext context = WebSocketConnectionContexts.claim(connectionId);
         assertNotNull(context);
-        assertSame(httpSession, context.getHttpSession());
+        assertSame(identity, context.getIdentity());
+        assertTrue(context.isHandshakeBound());
         assertTrue(context.isOriginAllowed());
+    }
+
+    @Test
+    public void doesNotBindClientGeneratedOrDifferentSessionTickets() throws Exception {
+        String issued = WebSocketConnectionContexts.issue(identity(), "session-a");
+        assertNotNull(issued);
+        HttpSession wrongSession = mock(HttpSession.class);
+        when(wrongSession.getId()).thenReturn("session-b");
+
+        HandshakeRequest request = mock(HandshakeRequest.class);
+        when(request.getRequestURI()).thenReturn(
+                new URI("ws://backend:8080/openmrs/ws/sihsalus/notifications"));
+        when(request.getParameterMap()).thenReturn(Collections.singletonMap(
+                "connectionId", Collections.singletonList(issued)));
+        when(request.getHeaders()).thenReturn(headers(
+                "Origin", "https://sihsalus.example",
+                "Host", "sihsalus.example",
+                "X-Forwarded-Proto", "https"));
+        when(request.getHttpSession()).thenReturn(wrongSession);
+
+        OpenmrsHandshakeConfigurator configurator = new OpenmrsHandshakeConfigurator(
+                new WebSocketOriginPolicy(Collections.<String>emptySet()));
+        configurator.modifyHandshake(mock(ServerEndpointConfig.class), request,
+                mock(HandshakeResponse.class));
+
+        WebSocketConnectionContext context = WebSocketConnectionContexts.claim(issued);
+        assertNotNull(context);
+        assertFalse(context.isHandshakeBound());
+
+        String arbitrary = UUID.randomUUID().toString();
+        when(request.getParameterMap()).thenReturn(Collections.singletonMap(
+                "connectionId", Collections.singletonList(arbitrary)));
+        configurator.modifyHandshake(mock(ServerEndpointConfig.class), request,
+                mock(HandshakeResponse.class));
+        assertFalse(WebSocketConnectionContexts.bindHandshake(
+                arbitrary, "session-b", true));
+    }
+
+    private SubscriberIdentity identity() {
+        return new SubscriberIdentity("11111111-1111-4111-8111-111111111111",
+                Collections.<String>emptySet(), false,
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     }
 
     private Map<String, List<String>> headers(String... pairs) {

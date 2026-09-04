@@ -39,6 +39,8 @@ public class TransportModuleConfigurationTest {
                     document.getElementsByTagName("filter-class").item(0).getTextContent().trim());
             assertEquals(NotificationStatusFilter.class.getName(),
                     document.getElementsByTagName("filter-class").item(1).getTextContent().trim());
+            assertEquals(WebSocketTicketFilter.class.getName(),
+                    document.getElementsByTagName("filter-class").item(2).getTextContent().trim());
 
             NodeList patterns = document.getElementsByTagName("url-pattern");
             List<String> values = new ArrayList<String>();
@@ -49,6 +51,8 @@ public class TransportModuleConfigurationTest {
             assertTrue(values.contains("/ws/sihsalus/notifications/sse/"));
             assertTrue(values.contains("/ws/sihsalus/notifications/status"));
             assertTrue(values.contains("/ws/sihsalus/notifications/status/"));
+            assertTrue(values.contains("/ws/sihsalus/notifications/websocket-ticket"));
+            assertTrue(values.contains("/ws/sihsalus/notifications/websocket-ticket/"));
         }
     }
 

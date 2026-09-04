@@ -1,26 +1,48 @@
 package org.openmrs.module.sihsalusnotifications.web;
 
-import javax.servlet.http.HttpSession;
+import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
 
 final class WebSocketConnectionContext {
 
-    private final HttpSession httpSession;
+    private final SubscriberIdentity identity;
 
-    private final boolean originAllowed;
+    private final String httpSessionId;
 
     private final long createdAt;
 
-    WebSocketConnectionContext(HttpSession httpSession, boolean originAllowed, long createdAt) {
-        this.httpSession = httpSession;
-        this.originAllowed = originAllowed;
+    private boolean handshakeBound;
+
+    private boolean originAllowed;
+
+    WebSocketConnectionContext(SubscriberIdentity identity, String httpSessionId, long createdAt) {
+        this.identity = identity;
+        this.httpSessionId = httpSessionId;
         this.createdAt = createdAt;
     }
 
-    HttpSession getHttpSession() {
-        return httpSession;
+    SubscriberIdentity getIdentity() {
+        return identity;
     }
 
-    boolean isOriginAllowed() {
+    boolean belongsToSession(String candidateSessionId) {
+        return candidateSessionId != null && httpSessionId.equals(candidateSessionId);
+    }
+
+    synchronized boolean bindHandshake(String candidateSessionId, boolean allowedOrigin) {
+        if (handshakeBound || candidateSessionId == null
+                || !httpSessionId.equals(candidateSessionId)) {
+            return false;
+        }
+        handshakeBound = true;
+        originAllowed = allowedOrigin;
+        return true;
+    }
+
+    synchronized boolean isHandshakeBound() {
+        return handshakeBound;
+    }
+
+    synchronized boolean isOriginAllowed() {
         return originAllowed;
     }
 

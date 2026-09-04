@@ -41,8 +41,7 @@ final class OpenmrsHandshakeConfigurator extends ServerEndpointConfig.Configurat
         Object session = request.getHttpSession();
         HttpSession httpSession = session instanceof HttpSession ? (HttpSession) session : null;
         boolean originAllowed = originPolicy.isAllowed(request.getRequestURI(), request.getHeaders());
-        WebSocketConnectionContexts.register(connectionId,
-                new WebSocketConnectionContext(httpSession, originAllowed, System.currentTimeMillis()));
+        WebSocketConnectionContexts.bindHandshake(connectionId, sessionId(httpSession), originAllowed);
     }
 
     private String firstParameter(Map<String, List<String>> parameters, String name) {
@@ -77,6 +76,14 @@ final class OpenmrsHandshakeConfigurator extends ServerEndpointConfig.Configurat
             return value != null && UUID.fromString(value).toString().equalsIgnoreCase(value);
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    private String sessionId(HttpSession session) {
+        try {
+            return session == null ? null : session.getId();
+        } catch (IllegalStateException exception) {
+            return null;
         }
     }
 }

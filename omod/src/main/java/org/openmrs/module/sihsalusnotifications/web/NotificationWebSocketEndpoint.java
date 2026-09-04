@@ -44,8 +44,6 @@ public class NotificationWebSocketEndpoint extends Endpoint {
 
     private static volatile ScheduledExecutorService expirationScheduler;
 
-    private final AuthenticatedSessionResolver sessionResolver = new AuthenticatedSessionResolver();
-
     private final TopicParser topicParser = new TopicParser();
 
     static synchronized void install(NotificationService service, NotificationJsonWriter writer,
@@ -85,19 +83,19 @@ public class NotificationWebSocketEndpoint extends Endpoint {
     public void onOpen(final Session session, EndpointConfig config) {
         String connectionId = firstParameter(session.getRequestParameterMap(), "connectionId");
         WebSocketConnectionContext connection = WebSocketConnectionContexts.claim(connectionId);
-        SubscriberIdentity identity = connection == null ? null
-                : sessionResolver.resolve(connection.getHttpSession());
+        SubscriberIdentity identity = connection == null ? null : connection.getIdentity();
         NotificationService service = notificationService;
         NotificationJsonWriter writer = jsonWriter;
         ScheduledExecutorService scheduler = expirationScheduler;
         long lifetimeMillis = connectionLifetimeMillis;
-        if (connection == null || !connection.isOriginAllowed() || identity == null
+        if (connection == null || !connection.isHandshakeBound()
+                || !connection.isOriginAllowed() || identity == null
                 || service == null || writer == null || scheduler == null) {
             if (rejectionDiagnosticLogged.compareAndSet(false, true)) {
                 log.warn("Rejecting a notification WebSocket connection "
-                        + "[handshakeContext={}, httpSession={}, originAllowed={}, identity={}, runtimeReady={}]",
+                        + "[ticket={}, sessionBound={}, originAllowed={}, identity={}, runtimeReady={}]",
                         connection != null,
-                        connection != null && connection.getHttpSession() != null,
+                        connection != null && connection.isHandshakeBound(),
                         connection != null && connection.isOriginAllowed(),
                         identity != null,
                         service != null && writer != null && scheduler != null);

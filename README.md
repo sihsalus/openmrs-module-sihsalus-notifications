@@ -2,7 +2,8 @@
 
 This repository owns the authenticated realtime transports used by SIHSALUS:
 
-- WebSocket: `/openmrs/ws/sihsalus/notifications?connectionId=<random-uuid>&topics=system,queue`
+- WebSocket ticket: `POST /openmrs/ws/sihsalus/notifications/websocket-ticket`
+- WebSocket: `/openmrs/ws/sihsalus/notifications?connectionId=<server-ticket>&topics=system,queue`
 - Server-Sent Events: `/openmrs/ws/sihsalus/notifications/sse?topics=system,queue`
 - Administrative status: `/openmrs/ws/sihsalus/notifications/status`
 
@@ -15,9 +16,12 @@ The deployable artifact contains both transports. The SIHSALUS distribution cons
   rejected.
 - WebSocket handshakes enforce same-origin access by default. Extra origins require an explicit,
   exact `sihsalusnotifications.allowedOrigins` entry.
-- Every WebSocket request includes a client-generated random `connectionId` UUID. It binds exactly
-  one upgrade to its authenticated handshake context and avoids sharing mutable authentication
-  state between concurrent JSR 356 handshakes.
+- A browser first obtains a server-generated `connectionId` from the ticket endpoint, which is
+  same-origin unless an additional exact origin was explicitly configured.
+  The ticket is bound to the authenticated OpenMRS HTTP session, expires after one minute, is
+  consumed by exactly one upgrade, and cannot be replaced by a client-generated UUID. Ticket
+  responses are never cacheable. This snapshots authorization while the normal OpenMRS servlet
+  request context is active, instead of trusting authentication state on a JSR 356 worker thread.
 - There is deliberately no REST endpoint that accepts arbitrary notifications. Trusted Java code
   in another OMOD publishes through `NotificationService`.
 - Every event is either addressed to one user UUID or protected by a named OpenMRS privilege.
@@ -82,8 +86,24 @@ diagnoses, or free text. Delivery failures are logged and never roll back the cl
 update. The event is a refresh signal only; clients must retrieve the authoritative result through
 the normal authenticated OpenMRS APIs.
 
-Browser WebSocket clients should generate the handshake identifier with `crypto.randomUUID()` and
-reconnect after close code `1001` (`reauthenticate`) or `1013` (temporary capacity/backpressure).
+Browser WebSocket clients should obtain a fresh one-use ticket for every connection:
+
+```js
+const response = await fetch('/openmrs/ws/sihsalus/notifications/websocket-ticket', {
+  method: 'POST',
+  credentials: 'same-origin',
+});
+if (!response.ok) throw new Error(`WebSocket ticket failed: ${response.status}`);
+const { connectionId } = await response.json();
+const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const socket = new WebSocket(
+  `${protocol}//${location.host}/openmrs/ws/sihsalus/notifications` +
+    `?connectionId=${encodeURIComponent(connectionId)}&topics=laboratory`,
+);
+```
+
+Obtain another ticket when reconnecting after close code `1001` (`reauthenticate`) or `1013`
+(temporary capacity/backpressure). Never persist or reuse a ticket.
 
 ## Order-created events
 
