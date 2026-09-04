@@ -1,6 +1,7 @@
 package org.openmrs.module.sihsalusnotifications.web;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
@@ -13,9 +14,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-import javax.servlet.http.HttpSession;
 import javax.websocket.CloseReason;
 import javax.websocket.EndpointConfig;
 import javax.websocket.Session;
@@ -23,8 +22,6 @@ import javax.websocket.Session;
 import org.junit.After;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
-import org.openmrs.User;
-import org.openmrs.api.context.UserContext;
 import org.openmrs.module.sihsalusnotifications.api.NotificationListener;
 import org.openmrs.module.sihsalusnotifications.api.NotificationService;
 import org.openmrs.module.sihsalusnotifications.api.NotificationSubscription;
@@ -50,10 +47,11 @@ public class NotificationWebSocketEndpointTest {
 
     @Test
     public void subscribesAnAuthenticatedConnectionWithItsRequestedTopics() throws Exception {
-        String connectionId = UUID.randomUUID().toString();
-        HttpSession httpSession = authenticatedHttpSession();
-        assertTrue(WebSocketConnectionContexts.register(connectionId,
-                new WebSocketConnectionContext(httpSession, true, System.currentTimeMillis())));
+        SubscriberIdentity expectedIdentity = authenticatedIdentity();
+        String connectionId = WebSocketConnectionContexts.issue(expectedIdentity, "session-a");
+        assertNotNull(connectionId);
+        assertTrue(WebSocketConnectionContexts.bindHandshake(
+                connectionId, "session-a", true));
 
         Session session = mock(Session.class);
         Map<String, List<String>> parameters = new HashMap<String, List<String>>();
@@ -76,6 +74,7 @@ public class NotificationWebSocketEndpointTest {
         ArgumentCaptor<java.util.Set<String>> topics = ArgumentCaptor.forClass(java.util.Set.class);
         verify(service).subscribe(identity.capture(), topics.capture(), any(NotificationListener.class));
         assertEquals("11111111-1111-4111-8111-111111111111", identity.getValue().getUserUuid());
+        assertEquals("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", identity.getValue().getLocationUuid());
         assertTrue(topics.getValue().contains("queue"));
         assertTrue(topics.getValue().contains("laboratory"));
         verify(session).setMaxIdleTimeout(60_000L);
@@ -84,16 +83,9 @@ public class NotificationWebSocketEndpointTest {
         verify(subscription).close();
     }
 
-    private HttpSession authenticatedHttpSession() {
-        HttpSession httpSession = mock(HttpSession.class);
-        UserContext userContext = mock(UserContext.class);
-        User user = mock(User.class);
-        when(httpSession.getAttribute(AuthenticatedSessionResolver.OPENMRS_USER_CONTEXT_ATTRIBUTE))
-                .thenReturn(userContext);
-        when(userContext.getAuthenticatedUser()).thenReturn(user);
-        when(user.getUuid()).thenReturn("11111111-1111-4111-8111-111111111111");
-        when(user.getRetired()).thenReturn(false);
-        when(user.getPrivileges()).thenReturn(Collections.emptyList());
-        return httpSession;
+    private SubscriberIdentity authenticatedIdentity() {
+        return new SubscriberIdentity("11111111-1111-4111-8111-111111111111",
+                Collections.<String>emptySet(), false,
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     }
 }

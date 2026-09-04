@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.websocket.CloseReason;
 import javax.websocket.Endpoint;
@@ -19,8 +20,12 @@ import javax.websocket.Session;
 import org.openmrs.module.sihsalusnotifications.api.NotificationService;
 import org.openmrs.module.sihsalusnotifications.api.NotificationSubscription;
 import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NotificationWebSocketEndpoint extends Endpoint {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationWebSocketEndpoint.class);
 
     static final String ENDPOINT_PATH = "/ws/sihsalus/notifications";
 
@@ -29,6 +34,8 @@ public class NotificationWebSocketEndpoint extends Endpoint {
     private static final Set<WebSocketDelivery> ACTIVE = Collections.newSetFromMap(
             new ConcurrentHashMap<WebSocketDelivery, Boolean>());
 
+    private static final AtomicBoolean rejectionDiagnosticLogged = new AtomicBoolean();
+
     private static volatile NotificationService notificationService;
 
     private static volatile NotificationJsonWriter jsonWriter;
@@ -36,8 +43,6 @@ public class NotificationWebSocketEndpoint extends Endpoint {
     private static volatile long connectionLifetimeMillis;
 
     private static volatile ScheduledExecutorService expirationScheduler;
-
-    private final AuthenticatedSessionResolver sessionResolver = new AuthenticatedSessionResolver();
 
     private final TopicParser topicParser = new TopicParser();
 
@@ -49,6 +54,7 @@ public class NotificationWebSocketEndpoint extends Endpoint {
         notificationService = service;
         jsonWriter = writer;
         connectionLifetimeMillis = lifetimeMillis;
+        rejectionDiagnosticLogged.set(false);
         expirationScheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable runnable) {
@@ -77,14 +83,23 @@ public class NotificationWebSocketEndpoint extends Endpoint {
     public void onOpen(final Session session, EndpointConfig config) {
         String connectionId = firstParameter(session.getRequestParameterMap(), "connectionId");
         WebSocketConnectionContext connection = WebSocketConnectionContexts.claim(connectionId);
-        SubscriberIdentity identity = connection == null ? null
-                : sessionResolver.resolve(connection.getHttpSession());
+        SubscriberIdentity identity = connection == null ? null : connection.getIdentity();
         NotificationService service = notificationService;
         NotificationJsonWriter writer = jsonWriter;
         ScheduledExecutorService scheduler = expirationScheduler;
         long lifetimeMillis = connectionLifetimeMillis;
-        if (connection == null || !connection.isOriginAllowed() || identity == null
+        if (connection == null || !connection.isHandshakeBound()
+                || !connection.isOriginAllowed() || identity == null
                 || service == null || writer == null || scheduler == null) {
+            if (rejectionDiagnosticLogged.compareAndSet(false, true)) {
+                log.warn("Rejecting a notification WebSocket connection "
+                        + "[ticket={}, sessionBound={}, originAllowed={}, identity={}, runtimeReady={}]",
+                        connection != null,
+                        connection != null && connection.isHandshakeBound(),
+                        connection != null && connection.isOriginAllowed(),
+                        identity != null,
+                        service != null && writer != null && scheduler != null);
+            }
             close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "unauthorized");
             return;
         }

@@ -6,7 +6,7 @@
 
   <groupId>io.github.proyecto-santaclotilde</groupId>
   <artifactId>sihsalusnotifications</artifactId>
-  <version>1.0.1</version>
+  <version>1.2.0</version>
   <packaging>pom</packaging>
 
   <name>SIHSALUS Realtime Notifications</name>
@@ -96,6 +96,18 @@
       <dependency>
         <groupId>org.springframework</groupId>
         <artifactId>spring-beans</artifactId>
+        <version>${spring.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-aop</artifactId>
+        <version>${spring.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-tx</artifactId>
         <version>${spring.version}</version>
         <scope>provided</scope>
       </dependency>

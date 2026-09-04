@@ -1,6 +1,10 @@
 package org.openmrs.module.sihsalusnotifications;
 
+import org.openmrs.api.OrderService;
+import org.openmrs.api.context.Context;
 import org.openmrs.module.BaseModuleActivator;
+import org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice;
+import org.openmrs.module.sihsalusnotifications.api.advice.OrderCreationNotificationAdvice;
 
 /**
  * OpenMRS lifecycle entry point for the realtime notifications module.
@@ -10,4 +14,30 @@ import org.openmrs.module.BaseModuleActivator;
  * module's servlets and filters.</p>
  */
 public final class SihsalusNotificationsActivator extends BaseModuleActivator {
+
+    private LaboratoryResultNotificationAdvice laboratoryResultNotificationAdvice;
+
+    private OrderCreationNotificationAdvice orderCreationNotificationAdvice;
+
+    @Override
+    public void started() {
+        laboratoryResultNotificationAdvice = Context.getRegisteredComponent(
+                "sihsalusLaboratoryResultNotificationAdvice", LaboratoryResultNotificationAdvice.class);
+        orderCreationNotificationAdvice = Context.getRegisteredComponent(
+                "sihsalusOrderCreationNotificationAdvice", OrderCreationNotificationAdvice.class);
+        Context.addAdvice(OrderService.class, laboratoryResultNotificationAdvice);
+        Context.addAdvice(OrderService.class, orderCreationNotificationAdvice);
+    }
+
+    @Override
+    public void stopped() {
+        if (laboratoryResultNotificationAdvice != null) {
+            Context.removeAdvice(OrderService.class, laboratoryResultNotificationAdvice);
+            laboratoryResultNotificationAdvice = null;
+        }
+        if (orderCreationNotificationAdvice != null) {
+            Context.removeAdvice(OrderService.class, orderCreationNotificationAdvice);
+            orderCreationNotificationAdvice = null;
+        }
+    }
 }
