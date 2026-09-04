@@ -115,6 +115,16 @@ public class LaboratoryResultNotificationAdviceTest {
     }
 
     @Test
+    public void ignoresRepeatedCompletionOfAnAlreadyCompletedOrder() throws Throwable {
+        TestOrder order = completedTestOrder();
+        order.setFulfillerStatus(Order.FulfillerStatus.COMPLETED);
+
+        advice.invoke(invocationFor(order, Order.FulfillerStatus.COMPLETED));
+
+        verify(notificationService, never()).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void skipsCompletedOrdersWithoutAnEncounterLocationToFailClosed() throws Throwable {
         TestOrder order = new TestOrder();
         order.setUuid(ORDER_UUID);
@@ -148,7 +158,7 @@ public class LaboratoryResultNotificationAdviceTest {
     private TestOrder completedTestOrder() {
         TestOrder order = new TestOrder();
         order.setUuid(ORDER_UUID);
-        order.setFulfillerStatus(Order.FulfillerStatus.COMPLETED);
+        order.setFulfillerStatus(Order.FulfillerStatus.IN_PROGRESS);
         Encounter encounter = new Encounter();
         Location facility = new Location();
         facility.setUuid(LOCATION_UUID);
@@ -167,7 +177,10 @@ public class LaboratoryResultNotificationAdviceTest {
         MethodInvocation invocation = mock(MethodInvocation.class);
         when(invocation.getMethod()).thenReturn(method);
         when(invocation.getArguments()).thenReturn(new Object[] { result, status, null });
-        when(invocation.proceed()).thenReturn(result);
+        when(invocation.proceed()).thenAnswer(ignored -> {
+            result.setFulfillerStatus(status);
+            return result;
+        });
         return invocation;
     }
 }

@@ -41,8 +41,9 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
+        boolean completionTransition = isCompletionTransition(invocation);
         Object result = invocation.proceed();
-        if (!isCompletedLaboratoryOrder(invocation, result)) {
+        if (!completionTransition || !isCompletedLaboratoryOrder(result)) {
             return result;
         }
 
@@ -76,14 +77,20 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
         return result;
     }
 
-    private boolean isCompletedLaboratoryOrder(MethodInvocation invocation, Object result) {
-        if (!UPDATE_METHOD.equals(invocation.getMethod().getName()) || !(result instanceof TestOrder)) {
+    private boolean isCompletionTransition(MethodInvocation invocation) {
+        if (!UPDATE_METHOD.equals(invocation.getMethod().getName())) {
             return false;
         }
 
         Object[] arguments = invocation.getArguments();
         return arguments.length >= 2
+                && arguments[0] instanceof TestOrder
                 && arguments[1] == Order.FulfillerStatus.COMPLETED
+                && ((Order) arguments[0]).getFulfillerStatus() != Order.FulfillerStatus.COMPLETED;
+    }
+
+    private boolean isCompletedLaboratoryOrder(Object result) {
+        return result instanceof TestOrder
                 && ((Order) result).getFulfillerStatus() == Order.FulfillerStatus.COMPLETED
                 && ((Order) result).getUuid() != null
                 && !((Order) result).getUuid().trim().isEmpty();
