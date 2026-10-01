@@ -1,4 +1,4 @@
-package org.openmrs.module.sihsalusnotifications.api.advice;
+package org.openmrs.module.sihsalusnotifications.adapters.orders;
 
 import java.util.Collections;
 

@@ -59,4 +59,13 @@
     <url-pattern>/ws/sihsalus/notifications/websocket-ticket</url-pattern>
     <url-pattern>/ws/sihsalus/notifications/websocket-ticket/</url-pattern>
   </filter-mapping>
+  <filter>
+    <filter-name>SIHSALUS notification inbox</filter-name>
+    <filter-class>org.openmrs.module.sihsalusnotifications.web.NotificationInboxFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>SIHSALUS notification inbox</filter-name>
+    <url-pattern>/ws/sihsalus/notifications/inbox</url-pattern>
+    <url-pattern>/ws/sihsalus/notifications/inbox/*</url-pattern>
+  </filter-mapping>
 </module>

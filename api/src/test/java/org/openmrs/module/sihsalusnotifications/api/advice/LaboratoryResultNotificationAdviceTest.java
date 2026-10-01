@@ -13,6 +13,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.aopalliance.intercept.MethodInvocation;
+import org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationAdvice;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -69,6 +70,25 @@ public class LaboratoryResultNotificationAdviceTest {
         assertEquals(null, request.getRecipientUserUuid());
         assertEquals(LOCATION_UUID, request.getScopeLocationUuid());
         assertEquals("{\"orderUuid\":\"" + ORDER_UUID + "\"}", request.getPayloadJson());
+    }
+
+    @Test
+    public void delegatesRequesterEligibilityToTheRegisteredDomainType() throws Throwable {
+        org.openmrs.module.sihsalusnotifications.api.NotificationInboxService inbox = mock(org.openmrs.module.sihsalusnotifications.api.NotificationInboxService.class);
+        advice.setNotificationInbox(inbox);
+        advice.invoke(invocationFor(completedTestOrder(), Order.FulfillerStatus.COMPLETED));
+        ArgumentCaptor<NotificationRequest> c = ArgumentCaptor.forClass(NotificationRequest.class);
+        verify(notificationService).publish(c.capture());
+        verify(inbox).publishAfterCommit("laboratory-result-ready", ORDER_UUID);
+    }
+
+    @Test
+    public void inboxFailureDoesNotRollBackClinicalCompletion() throws Throwable {
+        org.openmrs.module.sihsalusnotifications.api.NotificationInboxService inbox = mock(org.openmrs.module.sihsalusnotifications.api.NotificationInboxService.class);
+        org.mockito.Mockito.doThrow(new IllegalStateException("synthetic storage failure")).when(inbox).publishAfterCommit("laboratory-result-ready", ORDER_UUID);
+        advice.setNotificationInbox(inbox); TestOrder order = completedTestOrder();
+        assertSame(order, advice.invoke(invocationFor(order, Order.FulfillerStatus.COMPLETED)));
+        verify(notificationService).publish(any(NotificationRequest.class));
     }
 
     @Test

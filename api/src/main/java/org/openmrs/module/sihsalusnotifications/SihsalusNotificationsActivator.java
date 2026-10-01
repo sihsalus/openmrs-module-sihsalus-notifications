@@ -3,8 +3,8 @@ package org.openmrs.module.sihsalusnotifications;
 import org.openmrs.api.OrderService;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.BaseModuleActivator;
-import org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice;
-import org.openmrs.module.sihsalusnotifications.api.advice.OrderCreationNotificationAdvice;
+import org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationAdvice;
+import org.openmrs.module.sihsalusnotifications.adapters.orders.OrderCreationNotificationAdvice;
 
 /**
  * OpenMRS lifecycle entry point for the realtime notifications module.

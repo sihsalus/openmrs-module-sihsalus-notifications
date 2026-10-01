@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.Test;
-import org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice;
-import org.openmrs.module.sihsalusnotifications.api.advice.OrderCreationNotificationAdvice;
+import org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationAdvice;
+import org.openmrs.module.sihsalusnotifications.adapters.orders.OrderCreationNotificationAdvice;
 import org.openmrs.module.sihsalusnotifications.api.impl.InMemoryNotificationService;
 import org.springframework.beans.factory.support.ManagedList;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -26,9 +26,16 @@ public class NotificationServiceSpringContextTest {
             serviceContext.getPropertyValues().add("moduleService", new ManagedList<Object>());
             context.registerBeanDefinition("serviceContext", serviceContext);
 
+            context.getBeanFactory().registerSingleton("sessionFactory", org.mockito.Mockito.mock(org.hibernate.SessionFactory.class));
+            context.getBeanFactory().registerSingleton("alertService", org.mockito.Mockito.mock(org.openmrs.notification.AlertService.class));
+            context.getBeanFactory().registerSingleton("orderService", org.mockito.Mockito.mock(org.openmrs.api.OrderService.class));
+            context.getBeanFactory().registerSingleton("userService", org.mockito.Mockito.mock(org.openmrs.api.UserService.class));
+            context.getBeanFactory().registerSingleton("transactionManager", org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
             new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:moduleApplicationContext.xml");
             context.refresh();
 
+            assertTrue(context.getBean("sihsalusNotificationInbox") instanceof NotificationInboxService);
+            assertEquals(1, context.getBeansOfType(NotificationInboxType.class).size());
             Map<String, NotificationService> services = context.getBeansOfType(NotificationService.class);
             assertEquals(1, services.size());
             assertTrue(services.get("sihsalusNotificationService") instanceof InMemoryNotificationService);

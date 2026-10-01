@@ -1,4 +1,4 @@
-package org.openmrs.module.sihsalusnotifications.api.advice;
+package org.openmrs.module.sihsalusnotifications.adapters.laboratory;
 
 import java.util.Collections;
 
@@ -35,6 +35,10 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
 
     private static final Logger log = LoggerFactory.getLogger(LaboratoryResultNotificationAdvice.class);
 
+    private org.openmrs.module.sihsalusnotifications.api.NotificationInboxService notificationInbox;
+
+    public void setNotificationInbox(org.openmrs.module.sihsalusnotifications.api.NotificationInboxService value) { notificationInbox = value; }
+
     private NotificationService notificationService;
 
     private ObjectMapper objectMapper;
@@ -54,6 +58,7 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
             log.warn("Skipping a laboratory result notification without a tagged facility scope");
             return result;
         }
+        publishToRequester(orderUuid);
         Runnable publish = new Runnable() {
 
             @Override
@@ -110,6 +115,17 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
                     TOPIC, EVENT_TYPE, payload, REQUIRED_PRIVILEGE, scopeLocationUuid));
         } catch (JsonProcessingException | RuntimeException exception) {
             log.warn("Unable to publish the laboratory result-ready notification", exception);
+        }
+    }
+
+    private void publishToRequester(String orderUuid) {
+        if (notificationInbox == null) return;
+        try {
+            notificationInbox.publishAfterCommit(
+                    org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationType.NAME,
+                    orderUuid);
+        } catch (RuntimeException exception) {
+            log.warn("Unable to persist a requester result notification");
         }
     }
 
