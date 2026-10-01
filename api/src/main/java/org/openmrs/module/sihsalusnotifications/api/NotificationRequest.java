@@ -34,6 +34,12 @@ public final class NotificationRequest {
         return new NotificationRequest(topic, type, payloadJson, recipientUserUuid, requiredPrivilege, null);
     }
 
+    public static NotificationRequest forUserAtLocation(String userUuid, String topic,
+            String type, String payloadJson, String requiredPrivilege, String facilityUuid) {
+        if (userUuid == null || facilityUuid == null) throw new IllegalArgumentException("User and facility required");
+        return new NotificationRequest(topic, type, payloadJson, userUuid, requiredPrivilege, facilityUuid);
+    }
+
     public static NotificationRequest forPrivilege(String topic, String type,
             String payloadJson, String requiredPrivilege) {
         return new NotificationRequest(topic, type, payloadJson, null, requiredPrivilege, null);

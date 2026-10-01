@@ -35,6 +35,10 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
 
     private static final Logger log = LoggerFactory.getLogger(LaboratoryResultNotificationAdvice.class);
 
+    private org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox doctorResultInbox;
+
+    public void setDoctorResultInbox(org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox value) { doctorResultInbox = value; }
+
     private NotificationService notificationService;
 
     private ObjectMapper objectMapper;
@@ -59,6 +63,7 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
             @Override
             public void run() {
                 publishSafely(orderUuid, scopeLocationUuid);
+                publishToRequester(orderUuid, scopeLocationUuid);
             }
         };
 
@@ -110,6 +115,21 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
                     TOPIC, EVENT_TYPE, payload, REQUIRED_PRIVILEGE, scopeLocationUuid));
         } catch (JsonProcessingException | RuntimeException exception) {
             log.warn("Unable to publish the laboratory result-ready notification", exception);
+        }
+    }
+
+    private void publishToRequester(String orderUuid, String facilityUuid) {
+        if (doctorResultInbox == null) return;
+        try {
+            org.openmrs.User recipient = doctorResultInbox.recordCompleted(orderUuid);
+            if (recipient != null) {
+                notificationService.publish(NotificationRequest.forUserAtLocation(recipient.getUuid(),
+                        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.TOPIC, EVENT_TYPE,
+                        objectMapper.writeValueAsString(Collections.singletonMap("orderUuid", orderUuid)),
+                        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.PRIVILEGE, facilityUuid));
+            }
+        } catch (JsonProcessingException | RuntimeException exception) {
+            log.warn("Unable to persist or signal a requester result notification", exception);
         }
     }
 

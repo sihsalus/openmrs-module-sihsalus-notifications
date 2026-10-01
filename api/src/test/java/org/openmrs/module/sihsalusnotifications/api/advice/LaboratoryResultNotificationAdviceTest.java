@@ -72,6 +72,28 @@ public class LaboratoryResultNotificationAdviceTest {
     }
 
     @Test
+    public void signalsRequesterOnlyAfterDurableInboxCommitAndKeepsFacilityScope() throws Throwable {
+        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox inbox = mock(org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.class);
+        org.openmrs.User user = new org.openmrs.User(); user.setUuid("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+        when(inbox.recordCompleted(ORDER_UUID)).thenReturn(user); advice.setDoctorResultInbox(inbox);
+        advice.invoke(invocationFor(completedTestOrder(), Order.FulfillerStatus.COMPLETED));
+        ArgumentCaptor<NotificationRequest> c = ArgumentCaptor.forClass(NotificationRequest.class);
+        verify(notificationService, org.mockito.Mockito.times(2)).publish(c.capture());
+        NotificationRequest requester = c.getAllValues().get(1);
+        assertEquals("clinical-results", requester.getTopic()); assertEquals(user.getUuid(), requester.getRecipientUserUuid());
+        assertEquals(LOCATION_UUID, requester.getScopeLocationUuid()); assertEquals("app:hoja.clinica.ordenes", requester.getRequiredPrivilege());
+    }
+
+    @Test
+    public void inboxFailureDoesNotRollBackClinicalCompletion() throws Throwable {
+        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox inbox = mock(org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.class);
+        when(inbox.recordCompleted(ORDER_UUID)).thenThrow(new IllegalStateException("synthetic storage failure"));
+        advice.setDoctorResultInbox(inbox); TestOrder order = completedTestOrder();
+        assertSame(order, advice.invoke(invocationFor(order, Order.FulfillerStatus.COMPLETED)));
+        verify(notificationService).publish(any(NotificationRequest.class));
+    }
+
+    @Test
     public void waitsForTransactionCommitBeforePublishing() throws Throwable {
         TransactionSynchronizationManager.initSynchronization();
         TransactionSynchronizationManager.setActualTransactionActive(true);

@@ -26,6 +26,11 @@ public class NotificationServiceSpringContextTest {
             serviceContext.getPropertyValues().add("moduleService", new ManagedList<Object>());
             context.registerBeanDefinition("serviceContext", serviceContext);
 
+            context.getBeanFactory().registerSingleton("sessionFactory", org.mockito.Mockito.mock(org.hibernate.SessionFactory.class));
+            context.getBeanFactory().registerSingleton("alertService", org.mockito.Mockito.mock(org.openmrs.notification.AlertService.class));
+            context.getBeanFactory().registerSingleton("orderService", org.mockito.Mockito.mock(org.openmrs.api.OrderService.class));
+            context.getBeanFactory().registerSingleton("userService", org.mockito.Mockito.mock(org.openmrs.api.UserService.class));
+            context.getBeanFactory().registerSingleton("transactionManager", org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
             new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:moduleApplicationContext.xml");
             context.refresh();
 

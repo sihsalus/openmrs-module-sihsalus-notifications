@@ -142,10 +142,57 @@ The module targets Java 8 bytecode and is verified on Java 8 and Java 21:
 mvn --batch-mode --show-version --no-transfer-progress clean verify
 ```
 
-The deployable module is produced at `omod/target/sihsalusnotifications-1.2.0.omod`.
+The deployable module is produced at `omod/target/sihsalusnotifications-1.3.0-SNAPSHOT.omod`.
 
 ## Runtime notes
 
 The gateway must forward `Upgrade` and `Connection` headers for the exact WebSocket path and must
 disable proxy buffering for the SSE path. Installing, upgrading, or removing the WebSocket endpoint
 requires an OpenMRS restart because JSR 356 does not define dynamic endpoint removal.
+
+## Physician result inbox proposal (1.3.0-SNAPSHOT)
+
+A new result-ready signal is addressed to the user linked to the requesting
+Provider, on the `clinical-results` topic. It requires
+`app:hoja.clinica.ordenes` and the same nearest `Facility Location`. Recipient
+eligibility and the inbox endpoints additionally require `Get Orders`,
+`Get Patients` and `Get Observations`. The existing
+Laboratorio signal is preserved. Recipient metadata is not serialized and SSE
+still carries only `orderUuid`.
+
+Pending reviews use OpenMRS's existing durable Alert/AlertRecipient model rather
+than a new schema or browser history. Only newly completed, non-voided TestOrders
+with a matching persisted root observation are eligible; numeric zero is valid.
+Exactly one active User must be linked to the Provider's Person. Ambiguous,
+retired, unauthorized or absent links fail closed. Existing historical completions
+and amended results are outside this proposal.
+
+Alerts contain only the internal versioned marker and order UUID, never patient
+names, result values or clinical text. Writing occurs in REQUIRES_NEW after the
+clinical transaction commits. A pessimistic lock on the existing order row
+serializes duplicate completion callbacks before checking the durable alert.
+A temporary `Manage Alerts` proxy privilege is scoped only to saving the verified
+alert; it does not alter roles. Provider-to-user lookup similarly scopes `Get Users`
+to this server-side lookup. Persistence or delivery failures do not undo clinical
+completion. A persistence failure is logged; there is no durable outbox or automatic
+repair of such a missed alert in this proposal.
+
+- `GET /ws/sihsalus/notifications/results?offset=0`: current user's unread,
+  currently authorized completed orders at the selected facility, sorted newest
+  first, with pages of 20 and total count. The core AlertService loads this user's
+  unread alerts before filtering/pagination; this proposal does not add a separate
+  database query/index for high-volume inboxes.
+- `POST /ws/sihsalus/notifications/results/{id}/review`: idempotently mark this
+  user's own eligible alert recipient as read. Requires exact same-origin JSON.
+  Anonymous/retired/denied users, foreign alerts and other facilities cannot review.
+
+The list response contains patient and test names only after verifying recipient,
+Provider ownership, completed result and current facility. Both endpoints send
+`Cache-Control: no-store`. The API does not accept another user UUID or arbitrary
+notifications. Opening an inbox performs no writes. Reviewed notifications stay in
+core alerts for normal institutional retention; no purge or expiry is introduced.
+
+This snapshot requires coordinated synthetic DEV/QLTY validation before release:
+actual AlertService persistence and locking, provider/session permissions, completing
+results, sender/recipient isolation, F5/backend restart, failed writes, retry, burst
+updates and cleanup. Unit tests do not replace an OpenMRS database smoke test.

@@ -16,10 +16,19 @@
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
   </bean>
 
+  <bean id="sihsalusDoctorResultInbox" class="org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox">
+    <property name="sessionFactory" ref="sessionFactory" />
+    <property name="alerts" ref="alertService" />
+    <property name="orders" ref="orderService" />
+    <property name="users" ref="userService" />
+    <property name="transactionManager" ref="transactionManager" />
+  </bean>
+
   <bean id="sihsalusLaboratoryResultNotificationAdvice"
     class="org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice">
     <property name="notificationService" ref="sihsalusNotificationService" />
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
+    <property name="doctorResultInbox" ref="sihsalusDoctorResultInbox" />
   </bean>
 
   <bean id="sihsalusOrderCreationNotificationAdvice"
