@@ -116,6 +116,9 @@ public class NotificationInboxTest {
         when(alerts.getAlerts(doctor, false, false)).thenReturn(Collections.singletonList(alert));
         when(alerts.getAlert(9)).thenReturn(alert);
         assertEquals(1, inbox.list(doctor, facility.getUuid(), 0).get("total"));
+        assertEquals(0, inbox.list(doctor, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", 0).get("total"));
+        assertFalse(inbox.markRead(doctor, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", 9));
+        verify(other, never()).resolve(order.getUuid(), doctor, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
         when(doctor.hasPrivilege("View Referrals")).thenReturn(false);
         assertEquals(0, inbox.list(doctor, facility.getUuid(), 0).get("total"));
         assertFalse(inbox.markRead(doctor, facility.getUuid(), 9));

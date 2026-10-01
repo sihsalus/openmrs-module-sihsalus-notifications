@@ -20,6 +20,7 @@ public class NotificationInbox implements NotificationInboxService {
     public static final String EVENT = "NOTIFICATION_CREATED";
     private static final String PREFIX = "SIHSALUS:notification:v1:";
     private static final int PAGE_SIZE = 20;
+    private static final String UUID_PATTERN = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
     private AlertService alerts;
     private SessionFactory sessionFactory;
     private PlatformTransactionManager transactionManager;
@@ -73,21 +74,22 @@ public class NotificationInbox implements NotificationInboxService {
     }
 
     protected boolean create(String name, String subjectUuid) {
-        if (subjectUuid == null || !subjectUuid.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) return false;
+        if (subjectUuid == null || !subjectUuid.matches(UUID_PATTERN)) return false;
         NotificationInboxType type = registry().get(name);
         if (type == null) return false;
         NotificationInboxType.Delivery delivery = transaction(() -> {
             NotificationInboxType.Delivery target = type.recipient(subjectUuid);
-            if (target == null || target.getFacilityUuid() == null || target.getFacilityUuid().trim().isEmpty()
+            if (target == null || target.getFacilityUuid() == null || !target.getFacilityUuid().matches(UUID_PATTERN)
                     || !authorized(target.getUser(), type)) return null;
             // Serialize per-recipient creation across nodes without knowing a clinical resource.
             sessionFactory.getCurrentSession().buildLockRequest(new LockOptions(LockMode.PESSIMISTIC_WRITE))
                     .lock(target.getUser());
             if (!authorized(target.getUser(), type)
                     || type.resolve(subjectUuid, target.getUser(), target.getFacilityUuid()) == null) return null;
-            String text = PREFIX + name + ":" + subjectUuid;
+            String text = PREFIX + name + ":" + target.getFacilityUuid() + ":" + subjectUuid;
             for (Alert existing : alerts.getAlerts(target.getUser(), true, true)) {
-                if (text.equals(existing.getText())) return null;
+                String[] previous = reference(existing);
+                if (previous != null && name.equals(previous[0]) && subjectUuid.equals(previous[2])) return null;
             }
             Alert alert = new Alert(text, target.getUser());
             alert.setSatisfiedByAny(false);
@@ -147,20 +149,26 @@ public class NotificationInbox implements NotificationInboxService {
             Map<String, NotificationInboxType> types) {
         if (alert == null || user == null || facilityUuid == null || alert.getRecipient(user) == null
                 || alert.getText() == null || !alert.getText().startsWith(PREFIX)) return null;
-        String[] identity = alert.getText().substring(PREFIX.length()).split(":", -1);
-        if (identity.length != 2 || !identity[1].matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) return null;
+        String[] identity = reference(alert);
+        if (identity == null || !facilityUuid.equals(identity[1])) return null;
         NotificationInboxType type = types.get(identity[0]);
         if (!authorized(user, type)) return null;
-        Map<String, Object> content = type.resolve(identity[1], user, facilityUuid);
+        Map<String, Object> content = type.resolve(identity[2], user, facilityUuid);
         if (content == null || !(content.get("title") instanceof String)
                 || !(content.get("subtitle") instanceof String)) return null;
         Map<String, Object> row = new LinkedHashMap<String, Object>();
         row.put("id", alert.getAlertId());
         row.put("type", identity[0]);
-        row.put("subjectUuid", identity[1]);
+        row.put("subjectUuid", identity[2]);
         row.put("createdAt", alert.getDateCreated().toInstant().toString());
         row.put("content", content);
         return row;
+    }
+
+    private String[] reference(Alert alert) {
+        if (alert.getText() == null || !alert.getText().startsWith(PREFIX)) return null;
+        String[] parts = alert.getText().substring(PREFIX.length()).split(":", -1);
+        return parts.length == 3 && parts[1].matches(UUID_PATTERN) && parts[2].matches(UUID_PATTERN) ? parts : null;
     }
 
     protected void save(Alert alert) {

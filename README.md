@@ -137,7 +137,7 @@ creation across nodes. Deduplication is recipient + type + subject UUID, includi
 already-read alerts. This initial model deliberately supports one notification per
 subject/type; repeatable/amended events require a separately defined domain policy.
 
-Alert text stores only a versioned marker, type name and subject UUID. Current
+Alert text stores only a versioned marker, type name, facility UUID and subject UUID. Current
 names/details are resolved at read time, never in replay payloads or Alert text.
 A scoped Manage Alerts proxy privilege is used only after server-side identity and
 policy checks. Adapters own any narrowly scoped lookup privilege they require.
@@ -151,8 +151,9 @@ Notification read is not clinical review, approval, signature or workflow execut
   Requires exact same-origin JSON; foreign/unauthorized/unknown items return 404.
 
 Both endpoints use no-store and accept no other user UUID. Retired/anonymous users
-are rejected and a tagged facility is required. The kernel cannot substitute a
-client-supplied audience or facility. After durable commit it emits a user/facility
+are rejected and a tagged facility is required. The kernel independently enforces the stored facility boundary before invoking a
+domain resolver; a permissive resolver cannot expose an item at another facility.
+The kernel cannot substitute a client-supplied audience or facility. After durable commit it emits a user/facility
 scoped `NOTIFICATION_CREATED` event on `notifications`, with empty JSON payload;
 signal failure cannot undo persistence. Existing department signals are unchanged.
 
