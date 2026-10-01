@@ -1,4 +1,4 @@
-package org.openmrs.module.sihsalusnotifications.api.advice;
+package org.openmrs.module.sihsalusnotifications.adapters.laboratory;
 
 import java.util.Collections;
 
@@ -35,9 +35,9 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
 
     private static final Logger log = LoggerFactory.getLogger(LaboratoryResultNotificationAdvice.class);
 
-    private org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox doctorResultInbox;
+    private org.openmrs.module.sihsalusnotifications.api.NotificationInboxService notificationInbox;
 
-    public void setDoctorResultInbox(org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox value) { doctorResultInbox = value; }
+    public void setNotificationInbox(org.openmrs.module.sihsalusnotifications.api.NotificationInboxService value) { notificationInbox = value; }
 
     private NotificationService notificationService;
 
@@ -58,12 +58,12 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
             log.warn("Skipping a laboratory result notification without a tagged facility scope");
             return result;
         }
+        publishToRequester(orderUuid);
         Runnable publish = new Runnable() {
 
             @Override
             public void run() {
                 publishSafely(orderUuid, scopeLocationUuid);
-                publishToRequester(orderUuid, scopeLocationUuid);
             }
         };
 
@@ -118,18 +118,14 @@ public final class LaboratoryResultNotificationAdvice implements MethodIntercept
         }
     }
 
-    private void publishToRequester(String orderUuid, String facilityUuid) {
-        if (doctorResultInbox == null) return;
+    private void publishToRequester(String orderUuid) {
+        if (notificationInbox == null) return;
         try {
-            org.openmrs.User recipient = doctorResultInbox.recordCompleted(orderUuid);
-            if (recipient != null) {
-                notificationService.publish(NotificationRequest.forUserAtLocation(recipient.getUuid(),
-                        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.TOPIC, EVENT_TYPE,
-                        objectMapper.writeValueAsString(Collections.singletonMap("orderUuid", orderUuid)),
-                        org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox.PRIVILEGE, facilityUuid));
-            }
-        } catch (JsonProcessingException | RuntimeException exception) {
-            log.warn("Unable to persist or signal a requester result notification", exception);
+            notificationInbox.publishAfterCommit(
+                    org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationType.NAME,
+                    orderUuid);
+        } catch (RuntimeException exception) {
+            log.warn("Unable to persist a requester result notification");
         }
     }
 

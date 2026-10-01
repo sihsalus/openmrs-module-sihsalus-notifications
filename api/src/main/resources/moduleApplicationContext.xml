@@ -16,23 +16,27 @@
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
   </bean>
 
-  <bean id="sihsalusDoctorResultInbox" class="org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox">
+  <bean id="sihsalusNotificationInbox" class="org.openmrs.module.sihsalusnotifications.api.NotificationInbox">
     <property name="sessionFactory" ref="sessionFactory" />
     <property name="alerts" ref="alertService" />
+    <property name="transactionManager" ref="transactionManager" />
+    <property name="notifications" ref="sihsalusNotificationService" />
+  </bean>
+  <bean id="sihsalusLaboratoryResultNotificationType"
+    class="org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationType">
     <property name="orders" ref="orderService" />
     <property name="users" ref="userService" />
-    <property name="transactionManager" ref="transactionManager" />
   </bean>
 
   <bean id="sihsalusLaboratoryResultNotificationAdvice"
-    class="org.openmrs.module.sihsalusnotifications.api.advice.LaboratoryResultNotificationAdvice">
+    class="org.openmrs.module.sihsalusnotifications.adapters.laboratory.LaboratoryResultNotificationAdvice">
     <property name="notificationService" ref="sihsalusNotificationService" />
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
-    <property name="doctorResultInbox" ref="sihsalusDoctorResultInbox" />
+    <property name="notificationInbox" ref="sihsalusNotificationInbox" />
   </bean>
 
   <bean id="sihsalusOrderCreationNotificationAdvice"
-    class="org.openmrs.module.sihsalusnotifications.api.advice.OrderCreationNotificationAdvice">
+    class="org.openmrs.module.sihsalusnotifications.adapters.orders.OrderCreationNotificationAdvice">
     <property name="notificationService" ref="sihsalusNotificationService" />
     <property name="objectMapper" ref="sihsalusNotificationObjectMapper" />
   </bean>
@@ -42,6 +46,14 @@
       <list merge="true">
         <value>org.openmrs.module.sihsalusnotifications.api.NotificationService</value>
         <ref bean="sihsalusNotificationService" />
+      </list>
+    </property>
+  </bean>
+  <bean parent="serviceContext">
+    <property name="moduleService">
+      <list merge="true">
+        <value>org.openmrs.module.sihsalusnotifications.api.NotificationInboxService</value>
+        <ref bean="sihsalusNotificationInbox" />
       </list>
     </property>
   </bean>

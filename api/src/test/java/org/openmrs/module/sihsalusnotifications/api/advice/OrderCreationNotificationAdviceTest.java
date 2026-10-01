@@ -13,6 +13,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.aopalliance.intercept.MethodInvocation;
+import org.openmrs.module.sihsalusnotifications.adapters.orders.OrderCreationNotificationAdvice;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

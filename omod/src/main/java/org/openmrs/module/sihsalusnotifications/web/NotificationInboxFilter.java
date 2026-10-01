@@ -9,17 +9,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmrs.User;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.context.UserContext;
-import org.openmrs.module.sihsalusnotifications.api.DoctorResultInbox;
+import org.openmrs.module.sihsalusnotifications.api.NotificationInboxService;
 import org.openmrs.module.sihsalusnotifications.api.SubscriberIdentity;
 
-/** Only the authenticated user's own, facility-scoped completed orders are exposed. */
-public class DoctorResultInboxFilter implements Filter {
-    private static final String PATH = "/ws/sihsalus/notifications/results";
+/** Only the authenticated user's inbox is exposed; each registered type rechecks domain access. */
+public class NotificationInboxFilter implements Filter {
+    private static final String PATH = "/ws/sihsalus/notifications/inbox";
     private final AuthenticatedSessionResolver resolver = new AuthenticatedSessionResolver();
     private final ObjectMapper mapper = new ObjectMapper();
-    private final DoctorResultInbox injectedInbox;
-    public DoctorResultInboxFilter() { this(null); }
-    DoctorResultInboxFilter(DoctorResultInbox inbox) { injectedInbox = inbox; }
+    private final NotificationInboxService injectedInbox;
+    public NotificationInboxFilter() { this(null); }
+    NotificationInboxFilter(NotificationInboxService inbox) { injectedInbox = inbox; }
     public void init(FilterConfig config) { }
     public void destroy() { }
 
@@ -33,14 +33,14 @@ public class DoctorResultInboxFilter implements Filter {
         res.setDateHeader("Expires", 0L);
         SubscriberIdentity identity = resolver.resolve(req.getSession(false));
         if (identity == null) { res.sendError(401); return; }
-        if (!DoctorResultInbox.READ_PRIVILEGES.stream().allMatch(identity::hasPrivilege) || identity.getLocationUuid() == null) {
+        if (identity.getLocationUuid() == null) {
             res.sendError(403); return;
         }
         User user = ((UserContext)req.getSession(false).getAttribute(
                 AuthenticatedSessionResolver.OPENMRS_USER_CONTEXT_ATTRIBUTE)).getAuthenticatedUser();
         String path = req.getRequestURI().substring(req.getContextPath().length());
-        DoctorResultInbox inbox = injectedInbox == null
-                ? Context.getRegisteredComponent("sihsalusDoctorResultInbox", DoctorResultInbox.class) : injectedInbox;
+        NotificationInboxService inbox = injectedInbox == null
+                ? Context.getService(NotificationInboxService.class) : injectedInbox;
         try {
             if ((PATH.equals(path) || (PATH + "/").equals(path)) && "GET".equals(req.getMethod())) {
                 int offset = req.getParameter("offset") == null ? 0 : Integer.parseInt(req.getParameter("offset"));
@@ -48,12 +48,12 @@ public class DoctorResultInboxFilter implements Filter {
                 res.setContentType("application/json");
                 res.setCharacterEncoding("UTF-8");
                 mapper.writeValue(res.getWriter(), inbox.list(user, identity.getLocationUuid(), offset));
-            } else if (path.matches(PATH + "/[0-9]+/review") && "POST".equals(req.getMethod())) {
+            } else if (path.matches(PATH + "/[0-9]+/read") && "POST".equals(req.getMethod())) {
                 // JSON + exact Origin prevent cookie-authenticated cross-site form mutations.
                 if (req.getContentType() == null || !req.getContentType().startsWith("application/json")
                         || !sameOrigin(req)) { res.sendError(403); return; }
                 int id = Integer.parseInt(path.substring((PATH + "/").length(), path.lastIndexOf('/')));
-                if (!inbox.review(user, identity.getLocationUuid(), id)) { res.sendError(404); return; }
+                if (!inbox.markRead(user, identity.getLocationUuid(), id)) { res.sendError(404); return; }
                 res.setStatus(204);
             } else { res.sendError(405); }
         } catch (NumberFormatException exception) { res.sendError(400); }

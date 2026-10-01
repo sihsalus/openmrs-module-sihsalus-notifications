@@ -60,12 +60,12 @@
     <url-pattern>/ws/sihsalus/notifications/websocket-ticket/</url-pattern>
   </filter-mapping>
   <filter>
-    <filter-name>SIHSALUS doctor result inbox</filter-name>
-    <filter-class>org.openmrs.module.sihsalusnotifications.web.DoctorResultInboxFilter</filter-class>
+    <filter-name>SIHSALUS notification inbox</filter-name>
+    <filter-class>org.openmrs.module.sihsalusnotifications.web.NotificationInboxFilter</filter-class>
   </filter>
   <filter-mapping>
-    <filter-name>SIHSALUS doctor result inbox</filter-name>
-    <url-pattern>/ws/sihsalus/notifications/results</url-pattern>
-    <url-pattern>/ws/sihsalus/notifications/results/*</url-pattern>
+    <filter-name>SIHSALUS notification inbox</filter-name>
+    <url-pattern>/ws/sihsalus/notifications/inbox</url-pattern>
+    <url-pattern>/ws/sihsalus/notifications/inbox/*</url-pattern>
   </filter-mapping>
 </module>

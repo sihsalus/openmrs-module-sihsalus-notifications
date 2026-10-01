@@ -70,56 +70,13 @@ notifications.publish(NotificationRequest.forPrivilege(
 The wire event contains `id`, `topic`, `type`, `timestamp`, and `payload`. Recipient UUIDs and
 required privileges are authorization metadata and are never serialized to clients.
 
-## Laboratory result-ready event
+## Domain integrations
 
-Version 1.2.0 publishes a built-in event after an OpenMRS `TestOrder` is successfully moved to
-the `COMPLETED` fulfiller status:
-
-- topic: `laboratory`
-- type: `LAB_RESULT_READY`
-- required privilege: `app:home.laboratorio`
-- payload: `{ "orderUuid": "..." }`
-
-The event is emitted only after transaction commit and is restricted to the encounter location's
-nearest ancestor tagged `Facility Location`. It contains no patient demographics, result values,
-diagnoses, or free text. Delivery failures are logged and never roll back the clinical order
-update. The event is a refresh signal only; clients must retrieve the authoritative result through
-the normal authenticated OpenMRS APIs.
-
-Browser WebSocket clients should obtain a fresh one-use ticket for every connection:
-
-```js
-const response = await fetch('/openmrs/ws/sihsalus/notifications/websocket-ticket', {
-  method: 'POST',
-  credentials: 'same-origin',
-});
-if (!response.ok) throw new Error(`WebSocket ticket failed: ${response.status}`);
-const { connectionId } = await response.json();
-const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const socket = new WebSocket(
-  `${protocol}//${location.host}/openmrs/ws/sihsalus/notifications` +
-    `?connectionId=${encodeURIComponent(connectionId)}&topics=laboratory`,
-);
-```
-
-Obtain another ticket when reconnecting after close code `1001` (`reauthenticate`) or `1013`
-(temporary capacity/backpressure). Never persist or reuse a ticket.
-
-## Order-created events
-
-Version 1.2.0 emits department- and facility-scoped events after a genuinely new order commits:
-
-| OpenMRS order | Topic | Type | Required privilege |
-| --- | --- | --- | --- |
-| `DrugOrder` | `pharmacy` | `MEDICATION_ORDER_CREATED` | `app:home.farmacia` |
-| `TestOrder` | `laboratory` | `LAB_ORDER_CREATED` | `app:home.laboratorio` |
-
-Each payload contains only `{ "orderUuid": "..." }`. Patient identity, medication or test names,
-dosage, instructions, diagnosis, and free text are deliberately excluded. Revisions, renewals,
-discontinuations, and repeated saves do not emit creation events. As with result-ready events,
-delivery happens after commit and is only a signal for authorized clients to refetch their queue.
-An order whose encounter location has no ancestor tagged `Facility Location` produces no realtime
-event; normal worklist polling remains the fallback.
+Built-in laboratory and order-creation integrations live under
+[`adapters`](api/src/main/java/org/openmrs/module/sihsalusnotifications/adapters/README.md).
+They retain the existing department signals. Clinical eligibility and resource
+access belong to adapters; the generic inbox/transport does not know TestOrder,
+DrugOrder, observations or department privileges.
 
 ## Recovery and monitoring
 
@@ -150,49 +107,64 @@ The gateway must forward `Upgrade` and `Connection` headers for the exact WebSoc
 disable proxy buffering for the SSE path. Installing, upgrading, or removing the WebSocket endpoint
 requires an OpenMRS restart because JSR 356 does not define dynamic endpoint removal.
 
-## Physician result inbox proposal (1.3.0-SNAPSHOT)
+## Extensible durable inbox proposal (1.3.0-SNAPSHOT)
 
-A new result-ready signal is addressed to the user linked to the requesting
-Provider, on the `clinical-results` topic. It requires
-`app:hoja.clinica.ordenes` and the same nearest `Facility Location`. Recipient
-eligibility and the inbox endpoints additionally require `Get Orders`,
-`Get Patients` and `Get Observations`. The existing
-Laboratorio signal is preserved. Recipient metadata is not serialized and SSE
-still carries only `orderUuid`.
+`NotificationInboxService` is registered as an OpenMRS service. Trusted OMODs
+contribute Spring beans implementing `NotificationInboxType`, discovered through
+OpenMRS's registered components. No browser may register types, choose recipients,
+change permission policies or publish arbitrary notifications.
 
-Pending reviews use OpenMRS's existing durable Alert/AlertRecipient model rather
-than a new schema or browser history. Only newly completed, non-voided TestOrders
-with a matching persisted root observation are eligible; numeric zero is valid.
-Exactly one active User must be linked to the Provider's Person. Ambiguous,
-retired, unauthorized or absent links fail closed. Existing historical completions
-and amended results are outside this proposal.
+A type supplies a stable machine name, non-empty required read privileges,
+`recipient(subjectUuid)` and `resolve(subjectUuid, user, facilityUuid)`. Recipient
+selection and domain authorization belong to that module. `resolve` must return
+null unless current ownership, facility and resource state allow access; authorized
+content includes title/subtitle and optional domain context. Unknown/removed types
+stay unread and are not exposed; duplicate/invalid registrations fail closed.
+Adding another module requires no generic filter or service changes.
 
-Alerts contain only the internal versioned marker and order UUID, never patient
-names, result values or clinical text. Writing occurs in REQUIRES_NEW after the
-clinical transaction commits. A pessimistic lock on the existing order row
-serializes duplicate completion callbacks before checking the durable alert.
-A temporary `Manage Alerts` proxy privilege is scoped only to saving the verified
-alert; it does not alter roles. Provider-to-user lookup similarly scopes `Get Users`
-to this server-side lookup. Persistence or delivery failures do not undo clinical
-completion. A persistence failure is logged; there is no durable outbox or automatic
-repair of such a missed alert in this proposal.
+After saving its domain resource, a module calls:
 
-- `GET /ws/sihsalus/notifications/results?offset=0`: current user's unread,
-  currently authorized completed orders at the selected facility, sorted newest
-  first, with pages of 20 and total count. The core AlertService loads this user's
-  unread alerts before filtering/pagination; this proposal does not add a separate
-  database query/index for high-volume inboxes.
-- `POST /ws/sihsalus/notifications/results/{id}/review`: idempotently mark this
-  user's own eligible alert recipient as read. Requires exact same-origin JSON.
-  Anonymous/retired/denied users, foreign alerts and other facilities cannot review.
+```java
+Context.getService(NotificationInboxService.class)
+    .publishAfterCommit(MyNotificationType.NAME, subjectUuid);
+```
 
-The list response contains patient and test names only after verifying recipient,
-Provider ownership, completed result and current facility. Both endpoints send
-`Cache-Control: no-store`. The API does not accept another user UUID or arbitrary
-notifications. Opening an inbox performs no writes. Reviewed notifications stay in
-core alerts for normal institutional retention; no purge or expiry is introduced.
+The kernel defers publication until an active clinical transaction commits;
+rollback produces no notification. When no transaction is active, it persists
+immediately in its own transaction. Persisting core Alert/AlertRecipient uses
+REQUIRES_NEW and a pessimistic lock on the recipient User row to serialize duplicate
+creation across nodes. Deduplication is recipient + type + subject UUID, including
+already-read alerts. This initial model deliberately supports one notification per
+subject/type; repeatable/amended events require a separately defined domain policy.
 
-This snapshot requires coordinated synthetic DEV/QLTY validation before release:
-actual AlertService persistence and locking, provider/session permissions, completing
-results, sender/recipient isolation, F5/backend restart, failed writes, retry, burst
-updates and cleanup. Unit tests do not replace an OpenMRS database smoke test.
+Alert text stores only a versioned marker, type name and subject UUID. Current
+names/details are resolved at read time, never in replay payloads or Alert text.
+A scoped Manage Alerts proxy privilege is used only after server-side identity and
+policy checks. Adapters own any narrowly scoped lookup privilege they require.
+Notification read is not clinical review, approval, signature or workflow execution.
+
+- `GET /ws/sihsalus/notifications/inbox?offset=0`: the current authenticated user's
+  unread authorized items at the current tagged facility, newest first, pages of
+  20 with total/hasMore. Each item contains id/type/subjectUuid/createdAt/content.
+- `POST /ws/sihsalus/notifications/inbox/{id}/read`: idempotent own-recipient
+  acknowledgement after current type permissions and domain access are rechecked.
+  Requires exact same-origin JSON; foreign/unauthorized/unknown items return 404.
+
+Both endpoints use no-store and accept no other user UUID. Retired/anonymous users
+are rejected and a tagged facility is required. The kernel cannot substitute a
+client-supplied audience or facility. After durable commit it emits a user/facility
+scoped `NOTIFICATION_CREATED` event on `notifications`, with empty JSON payload;
+signal failure cannot undo persistence. Existing department signals are unchanged.
+
+Core AlertService loads this user's unread alerts before filtering/pagination;
+there is no optimized database query/index or retention purge in this proposal.
+Persistence failures are safely logged; there is no outbox or automatic repair.
+Domain adapter failure causes the read to fail rather than report false empty state.
+
+This replaces an unreleased doctor-specific prototype: no compatibility endpoint,
+legacy marker migration or historical backfill is introduced. The matching frontend
+must use enableNotificationInbox and its typed detail extension slot. Both PRs stay
+in draft pending coordinated synthetic DEV/QLTY validation: actual AlertService
+persistence/locking, account and facility isolation, permissions, completion,
+acknowledgement, F5/backend restart, rollback, retry/burst behavior and cleanup.
+Local Java mocks and UI previews do not establish deployed clinical validation.
